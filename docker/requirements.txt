@@ -1,0 +1,9 @@
+rtpt
+pandas
+scipy
+ftfy
+seaborn
+jupyter
+accelerate
+sentencepiece
+git+https://github.com/openai/CLIP.git

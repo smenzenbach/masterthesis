@@ -1,0 +1,30 @@
+services:
+  llavatrainer:
+    image: llava
+#    build:
+#     context: .
+#     dockerfile: Dockerfile
+    stdin_open: true
+    tty: true
+    entrypoint: bash
+    ports:
+      - "2222:2222"
+      - "1888:8888"
+    volumes:
+      - '/storage-02/common-repos:/common-repos'
+      - '/storage-01:/storage-01'
+      - /storage-01/ml-stud-share/ml-stud21:/workspace
+      - /home/ml-stud21:/home
+      - /storage-01/datasets/ISIC19:/datasets/ISIC19
+    working_dir: /workspace
+    shm_size: '200gb'
+    deploy:
+      resources:
+        limits:
+          cpus: '50'
+          memory: 500g
+        reservations:
+          devices:
+            - driver: nvidia
+#              device_ids: [ '2' ]
+              capabilities: [ gpu ]
