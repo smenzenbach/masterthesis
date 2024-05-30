@@ -1,0 +1,38 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/python
+{
+  "name": "llava",
+  "build": {
+    "dockerfile": "../../docker_llava/Dockerfile",
+    "context": "..",
+    "args": {
+      "COMPOSE_PROJ_NAME": "llava",
+      "KIND": "3.10"
+    }
+  },
+  "mounts": [
+    //"source=${localEnv:HOME}${localEnv:USERPROFILE}/.gitconfig,target=/root/.gitconfig,type=bind,consistency=cached",
+    //"source=/storage-01/ml-dsteinmann/ts_XIL/aim_db,target=/logging/db/david_aim/.aim,type=bind",
+    //"source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/root/.ssh,type=bind,consistency=cached",
+  ],
+  "remoteUser": "root", // More info: https://aka.ms/dev-containers-non-root
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "tamasfe.even-better-toml",
+        "github.copilot",
+        "genieai.chatgpt-vscode",
+        "ms-toolsai.jupyter",
+        "mikestead.dotenv",
+        "ms-python.black-formatter"
+      ]
+    }
+  },
+  "runArgs": [
+    //"--gpus",
+    //"device=3",
+    "--shm-size",
+    "50G"
+  ]
+}
