@@ -1,21 +1,21 @@
 services:
   dito:
-    image: dito
-#    build:
-#     context: .
-#     dockerfile: dito.Dockerfile
+    #image: dito
+    build:
+      context: .
+      dockerfile: dito.Dockerfile
     stdin_open: true
     tty: true
     entrypoint: bash
     ports:
       - "2222:2222"
-      - "1888:8888"
+      #- "1888:8888"
     volumes:
-      - '/storage-02/common-repos:/common-repos'
-      - '/storage-01:/storage-01'
-      - /storage-01/ml-stud-share/ml-stud21:/workspace
-      - /home/ml-stud21:/home
-      - /storage-01/datasets/ISIC19:/datasets/ISIC19
+      #- '/storage-02/common-repos:/common-repos'
+      #- '/storage-01:/storage-01'
+      - /storage-01/ml-stud-share/ml-stud21:/workspace/home01
+      - /home/ml-stud21:/workspace/home
+      - /storage-01/datasets/ISIC19:/workspace/datasets/ISIC19
     working_dir: /workspace
     shm_size: '200gb'
     deploy:
@@ -26,5 +26,5 @@ services:
         reservations:
           devices:
             - driver: nvidia
-#              device_ids: [ '2' ]
+              #              device_ids: [ '2' ]
               capabilities: [ gpu ]

@@ -39,23 +39,23 @@ RUN /bin/bash -c "\
     && conda config --set solver libmamba \   
     && conda config --add channels conda-forge \
     "
-
+# cuda 11.7
 RUN /bin/bash -c "\
     . activate home-robot \ 
-    && conda env config vars set CUDA_HOME=/usr/local/cuda-11.7 \
+    && conda env config vars set CUDA_HOME=/usr/local/cuda-12.1 \
     && conda install flax=0.6.1 \
     && conda install jax=0.4.13 \
     "
 RUN /bin/bash -c "\
     . activate home-robot \
-    && CONDA_OVERRIDE_CUDA="11.7" conda install -y cudnn=8.8.0.121=h838ba91_4\
-    && CONDA_OVERRIDE_CUDA="11.7" conda install -y tensorflow=2.14.0=cuda118py39hc3a5e0e_0 \
+    && CONDA_OVERRIDE_CUDA="12.1" conda install -y cudnn=8.8.0.121=h838ba91_4\
+    && CONDA_OVERRIDE_CUDA="12.1" conda install -y tensorflow=2.14.0=cuda118py39hc3a5e0e_0 \
     && pip install tensorflow-text==2.14.0 \
     "
 
 RUN /bin/bash -c "\
     . activate home-robot \ 
-    && CONDA_OVERRIDE_CUDA="11.7" conda install -y pytorch3d=0.7.5=cuda112py39hcd8cc04_0\
+    && CONDA_OVERRIDE_CUDA="12.1" conda install -y pytorch3d=0.7.5=cuda112py39hcd8cc04_0\
     "
 
 RUN /bin/bash -c "\
@@ -64,52 +64,52 @@ RUN /bin/bash -c "\
     && pip install --force-reinstall torch_cluster \
     "
 
-COPY projects/habitat_ovmm/fvlm /home-robot/src/home_robot/home_robot/perception/detection/fvlm
+COPY /storage-01/ml-stud-share/ml-stud21/google-research/fvlm /home-robot/src/home_robot/home_robot/perception/detection/fvlm
 
-ADD projects/habitat_ovmm/extra_code/dito_perception.py /home-robot/src/home_robot/home_robot/perception/detection/fvlm/dito_perception.py
+ADD /storage-01/ml-stud-share/ml-stud21/docker_dito/dito_perception.py /home-robot/src/home_robot/home_robot/perception/detection/fvlm/dito_perception.py
 
 #For navigation via bert embeddings
-RUN /bin/bash -c "\
-    . activate home-robot \
-    && pip install transformers \
-    "
+#RUN /bin/bash -c "\
+#    . activate home-robot \
+#    && pip install transformers \
+#    "
 
-# add baseline agent code
-ADD projects/habitat_ovmm/eval_baselines_agent.py /home-robot/projects/habitat_ovmm/agent.py
-ADD projects/habitat_ovmm/extra_code/esc_agent.py /home-robot/src/home_robot/home_robot/agent/ovmm_agent/esc_agent.py
-ADD projects/habitat_ovmm/extra_code/heuristic_agent_24.yaml /home-robot/projects/habitat_ovmm/configs/agent/heuristic_agent.yaml
-ADD projects/habitat_ovmm/extra_code/ovmm_perception.py /home-robot/src/home_robot/home_robot/agent/ovmm_agent/ovmm_perception.py
-ADD projects/habitat_ovmm/evaluator.py /home-robot/projects/habitat_ovmm/evaluator.py
+# # add baseline agent code
+# ADD projects/habitat_ovmm/eval_baselines_agent.py /home-robot/projects/habitat_ovmm/agent.py
+# ADD projects/habitat_ovmm/extra_code/esc_agent.py /home-robot/src/home_robot/home_robot/agent/ovmm_agent/esc_agent.py
+# ADD projects/habitat_ovmm/extra_code/heuristic_agent_24.yaml /home-robot/projects/habitat_ovmm/configs/agent/heuristic_agent.yaml
+# ADD projects/habitat_ovmm/extra_code/ovmm_perception.py /home-robot/src/home_robot/home_robot/agent/ovmm_agent/ovmm_perception.py
+# ADD projects/habitat_ovmm/evaluator.py /home-robot/projects/habitat_ovmm/evaluator.py
 
-#add floor height check 
-ADD projects/habitat_ovmm/extra_code/objectnav_agent_module.py /home-robot/src/home_robot/home_robot/agent/objectnav_agent/objectnav_agent_module.py
-ADD projects/habitat_ovmm/extra_code/categorical_2d_semantic_map_module.py /home-robot/src/home_robot/home_robot/mapping/semantic/categorical_2d_semantic_map_module.py
+# #add floor height check 
+# ADD projects/habitat_ovmm/extra_code/objectnav_agent_module.py /home-robot/src/home_robot/home_robot/agent/objectnav_agent/objectnav_agent_module.py
+# ADD projects/habitat_ovmm/extra_code/categorical_2d_semantic_map_module.py /home-robot/src/home_robot/home_robot/mapping/semantic/categorical_2d_semantic_map_module.py
 
-#Fix to have consistend episodes every run
-ADD projects/habitat_ovmm/extra_code/dataset.py /home-robot/src/third_party/habitat-lab/habitat-lab/habitat/core/dataset.py
+# #Fix to have consistend episodes every run
+# ADD projects/habitat_ovmm/extra_code/dataset.py /home-robot/src/third_party/habitat-lab/habitat-lab/habitat/core/dataset.py
 
-# add submission script
-ADD projects/habitat_ovmm/scripts/submission.sh /home-robot/submission.sh
+# # add submission script
+# ADD projects/habitat_ovmm/scripts/submission.sh /home-robot/submission.sh
 
-# set number of max steps to 1000
-ADD projects/habitat_ovmm/extra_code/ovmm.yaml /home-robot/src/third_party/habitat-lab/habitat-lab/habitat/config/benchmark/ovmm/ovmm.yaml
+# # set number of max steps to 1000
+# ADD projects/habitat_ovmm/extra_code/ovmm.yaml /home-robot/src/third_party/habitat-lab/habitat-lab/habitat/config/benchmark/ovmm/ovmm.yaml
 
-# add new navigation policy
-ADD projects/habitat_ovmm/extra_code/esc_frontier_exploration_policy.py /home-robot/src/home_robot/home_robot/navigation_policy/object_navigation/esc_frontier_exploration_policy.py
+# # add new navigation policy
+# ADD projects/habitat_ovmm/extra_code/esc_frontier_exploration_policy.py /home-robot/src/home_robot/home_robot/navigation_policy/object_navigation/esc_frontier_exploration_policy.py
 
-#Run with correct cudnn version
-ENV LD_LIBRARY_PATH /opt/conda/envs/home-robot/lib:$LD_LIBRARY_PATH
+# #Run with correct cudnn version
+# ENV LD_LIBRARY_PATH /opt/conda/envs/home-robot/lib:$LD_LIBRARY_PATH
 
-# set evaluation type to remote
-ENV AGENT_EVALUATION_TYPE remote
+# # set evaluation type to remote
+# ENV AGENT_EVALUATION_TYPE remote
 
-# additional command line arguments for local evaluations (empty for remote evaluation)
-ENV LOCAL_ARGS ""
+# # additional command line arguments for local evaluations (empty for remote evaluation)
+# ENV LOCAL_ARGS ""
 
-# run submission script
-CMD /bin/bash -c "\
-    . activate home-robot \
-    && cd /home-robot \
-    && export PYTHONPATH=/evalai_remote_evaluation:$PYTHONPATH \
-    && bash submission.sh $LOCAL_ARGS \
-    "
+# # run submission script
+# CMD /bin/bash -c "\
+#     . activate home-robot \
+#     && cd /home-robot \
+#     && export PYTHONPATH=/evalai_remote_evaluation:$PYTHONPATH \
+#     && bash submission.sh $LOCAL_ARGS \
+#     "

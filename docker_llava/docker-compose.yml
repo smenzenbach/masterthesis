@@ -3,8 +3,8 @@ services:
     container_name: llava
     image: llava
     build:
-     context: .
-     dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile
     stdin_open: true
     tty: true
     entrypoint: bash
@@ -12,9 +12,9 @@ services:
       - "2650:8889"
       - "2222:2222"
     volumes:
-      - /storage-01/datasets/ISIC19/:/datasets/ISIC19/
-      - /storage-01/ml-stud-share/ml-stud21:/workspace
-      - /home/ml-stud21:/home
+      - /storage-01/datasets/ISIC19/:/workspace/datasets/ISIC19/
+      - /storage-01/ml-stud-share/ml-stud21:/workspace/home01
+      - /home/ml-stud21:/workspace/home
     working_dir: /workspace
     shm_size: '200gb'
     deploy:
@@ -25,5 +25,5 @@ services:
         reservations:
           devices:
             - driver: nvidia
-#              device_ids: [ '2' ]
+              #              device_ids: [ '2' ]
               capabilities: [ gpu ]
