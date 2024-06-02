@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     stdin_open: true
     tty: true
-    entrypoint: bash
+    entrypoint: [ "/entrypoint.sh", "bash" ]
     ports:
       - "2650:8889"
       - "2222:2222"

@@ -19,37 +19,37 @@ RUN apt-get update && apt-get install -y git build-essential zlib1g-dev libncurs
 RUN apt update && \
     apt -y upgrade && \
     apt install -y --no-install-recommends \
-        software-properties-common \
-        build-essential \
-        nginx \
-        bash \
-        dos2unix \
-        git \
-        ncdu \
-        net-tools \
-        openssh-server \
-        libglib2.0-0 \
-        libsm6 \
-        libgl1 \
-        libxrender1 \
-        libxext6 \
-        ffmpeg \
-        wget \
-        curl \
-        psmisc \
-        rsync \
-        vim \
-        zip \
-        unzip \
-        htop \
-        screen \
-        tmux \
-        pkg-config \
-        libcairo2-dev \
-        libgoogle-perftools4 \
-        libtcmalloc-minimal4 \
-        apt-transport-https \
-        ca-certificates && \
+    software-properties-common \
+    build-essential \
+    nginx \
+    bash \
+    dos2unix \
+    git \
+    ncdu \
+    net-tools \
+    openssh-server \
+    libglib2.0-0 \
+    libsm6 \
+    libgl1 \
+    libxrender1 \
+    libxext6 \
+    ffmpeg \
+    wget \
+    curl \
+    psmisc \
+    rsync \
+    vim \
+    zip \
+    unzip \
+    htop \
+    screen \
+    tmux \
+    pkg-config \
+    libcairo2-dev \
+    libgoogle-perftools4 \
+    libtcmalloc-minimal4 \
+    apt-transport-https \
+    ca-certificates && \
     update-ca-certificates && \
     apt clean && \
     rm -rf /var/lib/apt/lists/* && \
@@ -106,6 +106,22 @@ RUN pip install trl
 RUN pip install llama_index
 RUN pip install flash_attn exllamav2 transformers -U
 RUN pip install vllm==0.3.3
+#yolo_world, dito
+RUN pip install supervision 
+RUN pip install -q inference-gpu[yolo-world]
+RUN pip install opencv-python
+RUN pip install plotly
 
-RUN mkdir /workspace
+
+# setup the workspace
+RUN mkdir -p /workspace
 WORKDIR /workspace
+
+# Set the entrypoint
+# Copy the entrypoint script into the image
+#COPY entrypoint.sh /entrypoint.sh
+
+# Make the entrypoint script executable
+#RUN chmod +x /entrypoint.sh
+
+#ENTRYPOINT ["/entrypoint.sh"]

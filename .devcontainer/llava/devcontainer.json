@@ -2,6 +2,7 @@
 // README at: https://github.com/devcontainers/templates/tree/main/src/python
 {
   "name": "llava",
+  "service": "llava",
   "build": {
     "dockerfile": "../../docker_llava/Dockerfile",
     "context": "..",
@@ -10,10 +11,11 @@
       "KIND": "3.10"
     }
   },
+  "workspaceFolder": "/workspace",
   "mounts": [
-    //"source=${localEnv:HOME}${localEnv:USERPROFILE}/.gitconfig,target=/root/.gitconfig,type=bind,consistency=cached",
-    //"source=/storage-01/ml-dsteinmann/ts_XIL/aim_db,target=/logging/db/david_aim/.aim,type=bind",
-    //"source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/root/.ssh,type=bind,consistency=cached",
+    "type=bind,source=/storage-01/datasets/ISIC19/,target=/workspace/datasets/ISIC19/",
+    "type=bind,source=/storage-01/ml-stud-share/ml-stud21,target=/workspace/home01",
+    "type=bind,source=/home/ml-stud21,target=/workspace/home"
   ],
   "remoteUser": "root", // More info: https://aka.ms/dev-containers-non-root
   "customizations": {
@@ -34,5 +36,6 @@
     //"device=3",
     "--shm-size",
     "50G"
-  ]
+  ],
+  "postCreateCommand": "bash -c /../../docker_llava/entrypoint.sh"
 }
