@@ -64,9 +64,9 @@ RUN /bin/bash -c "\
     && pip install --force-reinstall torch_cluster \
     "
 
-COPY /storage-01/ml-stud-share/ml-stud21/google-research/fvlm /home-robot/src/home_robot/home_robot/perception/detection/fvlm
+#COPY /storage-01/ml-stud-share/ml-stud21/google-research/fvlm /home-robot/src/home_robot/home_robot/perception/detection/fvlm
 
-ADD /storage-01/ml-stud-share/ml-stud21/docker_dito/dito_perception.py /home-robot/src/home_robot/home_robot/perception/detection/fvlm/dito_perception.py
+#ADD /storage-01/ml-stud-share/ml-stud21/docker_dito/dito_perception.py /home-robot/src/home_robot/home_robot/perception/detection/fvlm/dito_perception.py
 
 #For navigation via bert embeddings
 #RUN /bin/bash -c "\
@@ -113,3 +113,6 @@ ADD /storage-01/ml-stud-share/ml-stud21/docker_dito/dito_perception.py /home-rob
 #     && export PYTHONPATH=/evalai_remote_evaluation:$PYTHONPATH \
 #     && bash submission.sh $LOCAL_ARGS \
 #     "
+
+RUN mkdir /workspace
+WORKDIR /workspace

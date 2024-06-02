@@ -1,0 +1,118 @@
+# Select the base image
+FROM nvidia/cuda:12.1.0-devel-ubuntu20.04 as base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=on \
+    SHELL=/bin/bash \
+    CUDA_HOME=/usr/local/cuda-12.1 \
+    HF_HOME=/common-repos/LMs \
+    PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/cu121"
+
+RUN umask 000
+
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata
+# installations for python
+RUN apt-get update && apt-get install -y git build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev wget libbz2-dev liblzma-dev python3-opencv libsqlite3-dev
+
+## Install Ubuntu packages
+RUN apt update && \
+    apt -y upgrade && \
+    apt install -y --no-install-recommends \
+    software-properties-common \
+    build-essential \
+    nginx \
+    bash \
+    dos2unix \
+    git \
+    ncdu \
+    net-tools \
+    openssh-server \
+    libglib2.0-0 \
+    libsm6 \
+    libgl1 \
+    libxrender1 \
+    libxext6 \
+    ffmpeg \
+    wget \
+    curl \
+    psmisc \
+    rsync \
+    vim \
+    zip \
+    unzip \
+    htop \
+    screen \
+    tmux \
+    pkg-config \
+    libcairo2-dev \
+    libgoogle-perftools4 \
+    libtcmalloc-minimal4 \
+    apt-transport-https \
+    ca-certificates && \
+    update-ca-certificates && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+
+RUN mkdir /python
+WORKDIR /python
+RUN wget https://www.python.org/ftp/python/3.10.13/Python-3.10.13.tgz
+RUN tar xzf Python-3.10.13.tgz
+RUN rm Python-3.10.13.tgz
+WORKDIR /python/Python-3.10.13
+RUN ./configure --enable-optimizations
+RUN make install
+
+# link python 3.10 to python
+RUN ln -s /usr/local/bin/python3 /usr/local/bin/python
+RUN ln -s /usr/local/bin/pip3 /usr/local/bin/pip
+
+# upgrade pip
+RUN pip install --upgrade pip
+
+# workdir
+RUN mkdir -p /workspace/home-robot
+RUN cd  /workspace/home-robot
+
+# Stage 2: DITO
+# install baseline agent requirements
+#RUN /bin/bash -c "\
+#    git submodule update --init --recursive src/third_party/detectron2 \
+#    src/home_robot/home_robot/perception/detection/detic/Detic \
+#    src/third_party/contact_graspnet \
+#    && pip install -e src/third_party/detectron2 \
+#    && pip install -r src/home_robot/home_robot/perception/detection/detic/Detic/requirements.txt \
+#    && pip install -e src/home_robot \
+#    "
+
+# download pretrained Detic checkpoint
+#RUN mkdir -p /workspace/home-robot/src/home_robot/home_robot/perception/detection/detic/Detic/models && \
+#    wget https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth \
+#    -O /workspace/home-robot/src/home_robot/home_robot/perception/detection/detic/Detic/models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth \
+#    --no-check-certificate
+
+#Change Work directory, so commands execute from within the folder
+WORKDIR  /workspace/home-robot
+
+RUN /bin/bash -c "\
+    set CUDA_HOME=/usr/local/cuda-12.1 \
+    && pip install flax=0.6.1 \
+    && pip install jax=0.4.13 \
+    "
+RUN /bin/bash -c "\
+    pip install -y cudnn=8.8.0.121=h838ba91_4\
+    && pip install -y tensorflow=2.14.0=cuda118py39hc3a5e0e_0 \
+    && pip install tensorflow-text==2.14.0 \
+    "
+
+RUN /bin/bash -c "\
+    pip install -y pytorch3d=0.7.5=cuda112py39hcd8cc04_0\
+    "
+
+RUN /bin/bash -c "\
+    pip install --force-reinstall torch_geometric \
+    && pip install --force-reinstall torch_cluster \
+    "
+
+WORKDIR /workspace

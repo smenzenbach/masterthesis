@@ -11,8 +11,6 @@ services:
       - "2222:2222"
       #- "1888:8888"
     volumes:
-      #- '/storage-02/common-repos:/common-repos'
-      #- '/storage-01:/storage-01'
       - /storage-01/ml-stud-share/ml-stud21:/workspace/home01
       - /home/ml-stud21:/workspace/home
       - /storage-01/datasets/ISIC19:/workspace/datasets/ISIC19
