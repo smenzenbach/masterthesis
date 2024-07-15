@@ -4,10 +4,10 @@ services:
     image: llava
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.interactive
     stdin_open: true
     tty: true
-    entrypoint: [ "/entrypoint.sh", "bash" ]
+     #entrypoint: [ "/entrypoint.sh", "bash" ]
     ports:
       - "2650:8889"
       - "2222:2222"
