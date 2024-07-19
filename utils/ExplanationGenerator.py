@@ -125,6 +125,7 @@ class GeneratorOurs:
         self.normalize_self_attention = normalize_self_attention
         self.apply_self_in_rule_10 = apply_self_in_rule_10
         kwargs = {"alpha": 1}
+        print(input)
         output = self.model_usage.forward(input).question_answering_score
         model = self.model_usage.model
 
