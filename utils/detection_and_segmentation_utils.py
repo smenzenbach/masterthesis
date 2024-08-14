@@ -110,7 +110,7 @@ def overlay(image, mask, color, alpha, resize=None):
     """Combines image and its segmentation mask into a single image.
     https://www.kaggle.com/code/purplejester/showing-samples-with-segmentation-mask-overlay
 
-    Params:
+    frams:
         image: Training image. np.ndarray,
         mask: Segmentation mask. np.ndarray,
         color: Color for segmentation mask rendering.  tuple[int, int, int] = (255, 0, 0)
@@ -762,10 +762,24 @@ def remove_big_box_yolo(
     return detection_result
 
 
+def remove_small_box_dito(
+    detection_result: Dict[str, Any],
+    image_shape: Tuple[int, int],
+    area_threshold: float = 0.1,
+):
+    """
+    Remove detections that fill less than x percent of the image. The percentage is given by the area_threshold.
+    """
+    return remove_big_box_dito(
+        detection_result, image_shape, area_threshold, remove_small_box=True
+    )
+
+
 def remove_big_box_dito(
     detection_result: Dict[str, Any],
     image_shape: Tuple[int, int],
     area_threshold: float = 0.9,
+    remove_small_box: bool = False,
 ):
     """
     Remove detections that fill more than x percent of the image. The percentage is given by the area_threshold.
@@ -789,8 +803,12 @@ def remove_big_box_dito(
         height = ymax - ymin
         bb_area = width * height
         img_area = image_shape[0] * image_shape[1]
-        if bb_area / img_area < area_threshold:
-            filtered_indices.append(idx)
+        if remove_small_box:
+            if bb_area / img_area > area_threshold:
+                filtered_indices.append(idx)
+        else:
+            if bb_area / img_area < area_threshold:
+                filtered_indices.append(idx)
 
     if len(filtered_indices) == 0:
         return detection_result
