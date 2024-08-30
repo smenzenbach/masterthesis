@@ -1,10 +1,12 @@
 from json import load
+from re import T
 from llama_index.core import SimpleDirectoryReader
 import os
 import numpy as np
 from PIL import Image
 import sys
 import matplotlib.pyplot as plt
+import warnings
 
 file_dir = os.getcwd()
 rrr_root = os.path.abspath(os.path.join(file_dir, "/workspace/home/rrr"))
@@ -18,11 +20,14 @@ import rrr.decoy_mnist as decoy_mnist
 
 def load_images(
     dir_path="/home/data/ISIC2019/raw",
-    confounder_dir="patch",
-    no_confounder_dir="no_patch",
+    confounder_dir=None,
+    no_confounder_dir=None,
+    ignore_copy=False,
 ):
     """
-    Returns ISIC2019 images in two lists (images_patch, images_no_patch)
+    If confounder_dir and no_confounder_dir are None, returns a list images with metadata for each image.
+    If confounder_dir and no_confounder_dir are not None, returns two lists (images_confounder, images_no_confounder) with metadata for each image.
+
 
     Example metadata output:
     print(images_patch[0]['meta'])
@@ -35,36 +40,56 @@ def load_images(
         recursive=True,
         filename_as_id=True,
     ).load_data()
-    images_patch = []
-    images_no_patch = []
 
-    for image in image_documents:
-        metadata = metadata_str2dict(image.get_metadata_str())
-        image_path = metadata["file_path"]
+    seperate_dicts = confounder_dir is not None and no_confounder_dir is not None
 
-        folder_name = os.path.basename(os.path.dirname(image_path))
+    if seperate_dicts:
+        images_confounder = []
+        images_no_confounder = []
 
-        if folder_name == confounder_dir:
-            metadata[confounder_dir] = True
-            images_patch.append({"image": image, "meta": metadata})
+        for image in image_documents:
+            metadata = metadata_str2dict(image.get_metadata_str())
+            image_path = metadata["file_path"]
 
-        elif folder_name == no_confounder_dir:
-            metadata[confounder_dir] = False
-            images_no_patch.append({"image": image, "meta": metadata})
+            if ignore_copy and "copy" in image_path.lower():
+                continue
 
-        else:
-            print(
-                f"The jpg is not in neither the {confounder_dir} nor {no_confounder_dir} folder."
-            )
+            folder_name = os.path.basename(os.path.dirname(image_path))
 
-    return images_patch, images_no_patch
+            if folder_name == confounder_dir:
+                metadata[confounder_dir] = True
+                # TODO: convert image to PIL?
+                images_confounder.append({"image": image, "meta": metadata})
+
+            elif folder_name == no_confounder_dir:
+                metadata[confounder_dir] = False
+                images_no_confounder.append({"image": image, "meta": metadata})
+
+            else:
+                print(
+                    f"The jpg is not in neither the {confounder_dir} nor {no_confounder_dir} folder."
+                )
+
+        return images_confounder, images_no_confounder
+
+    else:
+        images = []
+
+        for image in image_documents:
+            metadata = metadata_str2dict(image.get_metadata_str())
+            image_path = metadata["file_path"]
+            if ignore_copy and "copy" in image_path.lower():
+                continue
+            images.append({"image": image, "meta": metadata})
+
+        return images
 
 
 def load_images_and_combine(
     dir_path="/home/data/ISIC2019/raw",
     confounder_dir="patch",
     no_confounder_dir="no_patch",
-    num_imgs=100,
+    num_imgs=None,
 ):
     """
     Returns one list with ISIC2019 images half of images_patch and half of images_no_patch with a total of num_imgs
@@ -77,12 +102,32 @@ def load_images_and_combine(
         dir_path, confounder_dir, no_confounder_dir
     )
 
-    num_imgs_per_class = int(np.ceil(num_imgs / 2))
-
     # combine images with and without patch
     images = []
-    images.extend(images_confounder[:num_imgs_per_class])
-    images.extend(images_no_confounder[:num_imgs_per_class])
+    if num_imgs is None:
+        images.extend(images_confounder)
+        images.extend(images_no_confounder)
+    else:
+        # get half of the images with patch and half of the images without patch
+        # if not enough images, return all
+        num_imgs_per_class = int(np.ceil(num_imgs / 2))
+        num_imgs_confounder = num_imgs_per_class
+        num_imgs_no_confounder = num_imgs_per_class
+
+        if num_imgs_per_class > len(images_confounder):
+            warnings.warn(
+                f"Only {len(images_confounder)} images with confounder instead of {num_imgs_per_class} available. Returning all."
+            )
+            num_imgs_confounder = len(images_confounder)
+
+        if num_imgs_per_class > len(images_no_confounder):
+            warnings.warn(
+                f"Only {len(images_no_confounder)} images without confounder instead of {num_imgs_per_class} available. Returning all."
+            )
+            num_imgs_no_confounder = len(images_no_confounder)
+
+        images.extend(images_confounder[:num_imgs_confounder])
+        images.extend(images_no_confounder[:num_imgs_no_confounder])
 
     return images
 
