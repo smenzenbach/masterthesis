@@ -11,6 +11,7 @@ from eval_segmentation import (
 
 from eval_confounder_detection import (
     evaluation_metrics,
-    build_gt_csv,
+    build_gt_csv_from_seg_gt,
+    build_gt_csv_from_seperated_folders,
     create_evaluation_yaml,
 )

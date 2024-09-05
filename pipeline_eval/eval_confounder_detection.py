@@ -1,6 +1,8 @@
+from logging import warn, warning
 import os, sys
 import csv
 import yaml
+import warnings
 
 from dataclasses import dataclass
 
@@ -8,10 +10,12 @@ from dataclasses import dataclass
 project_root = os.path.abspath("..")  # Adjust this path if needed
 sys.path.append(project_root)
 
-from utils import load_images
+from utils import load_images, get_images_from_directory
 
 
-def build_gt_csv(csv_path, images_dir_path, confounder_dir, no_confounder_dir):
+def build_gt_csv_from_seperated_folders(
+    csv_path, images_dir_path, confounder_dir, no_confounder_dir
+):
     """
     Build a csv file with ground truth values if a confounder is in the image. 1 if confounder is present, 0 otherwise.
     It is assumed that the confounder is present in the images in the confounder_dir and not present in the images in the no_confounder_dir.
@@ -63,6 +67,42 @@ def build_gt_csv(csv_path, images_dir_path, confounder_dir, no_confounder_dir):
         write_to_csv(images_no_confounder, 0)
 
 
+def build_gt_csv_from_seg_gt(csv_path, images_dir_path, seg_dir_path):
+    """
+    Build a csv file with ground truth values if a confounder is in the image. 1 if confounder is present, 0 otherwise.
+    It is assumed that the confounder is present in the images in the seg_dir_path.
+
+    Parameters
+    ----------
+    csv_path : str
+        The path to save the csv file.
+    images_dir_path : str
+        The path to the directory of the images of the dataset.
+    seg_dir_path : str
+        The path to the directory where the segmented images are stored.
+
+    Returns
+    -------
+    None
+    """
+
+    images = get_images_from_directory(images_dir_path, without_img=True, sub_dir=True)
+    seg_images = get_images_from_directory(seg_dir_path, without_img=True, sub_dir=True)
+
+    seg_images = [img["file_name"] for img in seg_images]
+
+    with open(csv_path, mode="w") as csv_file:
+        writer = csv.writer(csv_file)
+
+        # Write header
+        writer.writerow(["image_file_name", "label"])
+
+        for img_dict in images:
+            image_file_name = img_dict["file_name"]
+            label = 1 if image_file_name in seg_images else 0
+            writer.writerow([image_file_name, label])
+
+
 def evaluation_metrics(gt_csv, predictions_csv):
     """
     Compare the ground truth values with the predictions and return the evaluation metrics: accuracy, recall, precision, and f1.
@@ -94,6 +134,11 @@ def evaluation_metrics(gt_csv, predictions_csv):
         - false_negative: The number of false negatives.
         - true_positive: The number of true positives.
         - true_negative: The number of true negatives.
+        - num_imgs: The number of images in the predictions csv file.
+
+    Warnings
+    --------
+    If there are images in the ground truth csv that are not in the predictions csv, a warning will be raised.
     """
 
     # dataclass
@@ -107,6 +152,7 @@ def evaluation_metrics(gt_csv, predictions_csv):
         false_negative: int = 0
         true_positive: int = 0
         true_negative: int = 0
+        num_imgs: int = 0
 
     with open(gt_csv, mode="r") as gt_file, open(
         predictions_csv, mode="r"
@@ -146,6 +192,15 @@ def evaluation_metrics(gt_csv, predictions_csv):
         precision = true_positive / (true_positive + false_positive)
         f1 = 2 * (precision * recall) / (precision + recall)
 
+        num_imgs = len(pred_dict)
+
+        # check if there are any images in the ground truth csv that are not in the predictions csv
+        if len(gt_dict) > len(pred_dict):
+            missing_imgs = set(gt_dict.keys()) - set(pred_dict.keys())
+            warnings.warn(
+                f"The following {len(missing_imgs)} images are missing in the predictions csv: {sorted(missing_imgs)}"
+            )
+
         return EvaluationMetrics(
             accuracy,
             recall,
@@ -155,6 +210,7 @@ def evaluation_metrics(gt_csv, predictions_csv):
             false_negative,
             true_positive,
             true_negative,
+            num_imgs,
         )
 
 
@@ -183,6 +239,7 @@ def create_evaluation_yaml(yaml_path, metrics):
         "false_negative": metrics.false_negative,
         "true_positive": metrics.true_positive,
         "true_negative": metrics.true_negative,
+        "num_imgs": metrics.num_imgs,
     }
 
     with open(yaml_path, "w") as yaml_file:

@@ -112,6 +112,22 @@ RUN pip install -q inference-gpu[yolo-world]
 RUN pip install opencv-python
 RUN pip install plotly
 
+RUN pip install tensorflow
+
+# mnist
+RUN pip install future
+
+# vllm error in sglang
+RUN pip install --upgrade pip
+RUN pip install "sglang[all]"
+
+# Install FlashInfer CUDA kernels
+RUN pip install flashinfer -i https://flashinfer.ai/whl/cu121/torch2.4/
+
+# inpainting
+RUN pip install diffusers
+RUN pip install iopaint
+
 
 # setup the workspace
 RUN mkdir -p /workspace

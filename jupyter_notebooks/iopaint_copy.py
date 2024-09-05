@@ -1,3 +1,4 @@
+from operator import index
 from diffusers import AutoPipelineForInpainting
 import torch
 import os, sys
@@ -15,7 +16,7 @@ import subprocess
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
-from utils import load_images_and_combine, load_images
+from utils import get_images_from_directory, load_images, extract_index
 from utils import mask_on_image, dilate_mask, plot_grid
 
 import argparse
@@ -29,7 +30,7 @@ parser.add_argument(
     "--start",
     default="0",
     type=int,
-    help="Number of images to skip before starting inpainting",
+    help="Image index to start from",
 )
 
 parser.add_argument(
@@ -38,6 +39,13 @@ parser.add_argument(
     default="2",
     type=str,
     help="Device to run the inpainting on",
+)
+
+parser.add_argument(
+    "--id",
+    default="0000",
+    type=str,
+    help="ID number of experiment",
 )
 
 
@@ -82,22 +90,23 @@ dataset = datasets[dataset_key]
 # images_confounder, images_no_confounder = load_images(dir_path=f"/workspace/home/data/{dataset['dataset_dir']}/raw", confounder_dir=dataset['confounder_dir'], no_confounder_dir=dataset['no_confounder_dir'])
 # segmentation_masks_confounder, _ = load_images(dir_path=f"/workspace/home/data/{dataset['dataset_dir']}/seg", confounder_dir=dataset['confounder_dir'], no_confounder_dir=dataset['no_confounder_dir'])
 
-segmentation_masks_confounder = load_images(
-    dir_path=f"/workspace/datasets/ISIC19/segmentation", ignore_copy=True
-)
+if args.id == "0000":
+    segmentation_masks_path = f"/workspace/datasets/ISIC19/segmentation"
+else:
+    # TODO: change the structure of tehdata
+    segmentation_masks_path = f"{dataset['seg_path']}_dito/{args.id}"
+
+segmentation_masks = load_images(dir_path=segmentation_masks_path, ignore_copy=True)
 
 
-output_dir = f"/workspace/home/outputfiles/{dataset['dataset_dir']}/inpainting/iopaint/{init_model}"
+output_dir = f"/workspace/home/outputfiles/{dataset['dataset_dir']}/inpainting/iopaint/{args.id}/{init_model}"
 
-output_dir_confounder = os.path.join(output_dir, dataset["confounder_dir"])
 
-output_dir_confounder2 = f"/workspace/home/data/{dataset['dataset_dir']}/inpainted/"
+output_dir2 = f"{dataset['inpainted_path']}/{args.id}"
 # output_dir_no_confounder = os.path.join(output_dir, dataset['no_confounder_dir'])
 
 # Create output directories if they don't exist
-os.makedirs(output_dir_confounder, exist_ok=True)
-# os.makedirs(output_dir_no_confounder, exist_ok=True)
-
+os.makedirs(output_dir, exist_ok=True)
 
 prompt = "part of skin in homogenous skin color"
 # "part of skin"
@@ -111,18 +120,13 @@ prompt = "part of skin in homogenous skin color"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 # for i, (image_dict, mask_dict) in enumerate(tqdm(zip(images_confounder, segmentation_masks_confounder))):
-for i, mask_dict in enumerate(tqdm(segmentation_masks_confounder)):
+for i, mask_dict in enumerate(tqdm(segmentation_masks)):
     mask = mask_dict["image"]
     meta_mask = mask_dict["meta"]
     mask_url = meta_mask["file_path"]
     file_name = meta_mask["file_name"]
 
-    index = file_name.split("_")[1]
-    # remove the file extension
-    index = index.split(".")[0]
-    # remove the leading zeros
-    index = index.lstrip("0")
-    index = int(index)
+    index = extract_index(file_name)
 
     # skip images before the start index
     if index < args.start:
@@ -131,15 +135,15 @@ for i, mask_dict in enumerate(tqdm(segmentation_masks_confounder)):
     # skip already inpainted images
     if os.path.exists(
         os.path.join(
-            output_dir_confounder2,
+            output_dir2,
             file_name,
         )
     ):
-        filepath = os.path.join(output_dir_confounder2, file_name)
+        filepath = os.path.join(output_dir2, file_name)
         print(f"\033[31m Already inpainted {filepath} \033[0m")
         continue
 
-    img_url = mask_url.replace("segmentation", "raw")
+    img_url = f"{dataset['raw_path']}/{file_name}"
 
     # Load the image
     image = Image.open(img_url).convert("RGB")
@@ -167,14 +171,14 @@ for i, mask_dict in enumerate(tqdm(segmentation_masks_confounder)):
             f"--device={device}",
             f"--image={img_url}",
             f"--mask={mask_path}",
-            f"--output={output_dir_confounder}",
+            f"--output={output_dir}",
         ]
 
         # Execute the command
         subprocess.run(command)
 
         # path for second iteration
-        img_url = os.path.join(output_dir_confounder, file_name.replace(".jpg", ".png"))
+        img_url = os.path.join(output_dir, file_name.replace(".jpg", ".png"))
 
         #!iopaint run --model="diffusers/stable-diffusion-xl-1.0-inpainting-0.1" --device={device} --image={img_url} --mask={mask_path} --output={output_dir_confounder2}
 
@@ -197,9 +201,9 @@ for i, mask_dict in enumerate(tqdm(segmentation_masks_confounder)):
         result = result.resize(original_img_size)
 
         # Save the inpainted image
-        result.save(f"{output_dir_confounder2}/{file_name}")
+        result.save(f"{output_dir2}/{file_name}")
 
-        print(f"\033[31m Saved {output_dir_confounder2}/{file_name} \033[0m")
+        print(f"\033[31m Saved {output_dir2}/{file_name} \033[0m")
 
 
 # for image_dict in images_no_confounder:

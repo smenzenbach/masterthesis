@@ -1,5 +1,4 @@
-from json import load
-from re import T
+import re
 from llama_index.core import SimpleDirectoryReader
 import os
 import numpy as np
@@ -7,6 +6,7 @@ from PIL import Image
 import sys
 import matplotlib.pyplot as plt
 import warnings
+import csv
 
 file_dir = os.getcwd()
 rrr_root = os.path.abspath(os.path.join(file_dir, "/workspace/home/rrr"))
@@ -191,3 +191,143 @@ def metadata_str2dict(string):
         file_info_dict[key] = value
 
     return file_info_dict
+
+
+def get_images_from_list(
+    image_name_list, dir_path, sub_dir=False, without_img=False, ignore_copy=False
+):
+    def process_image(image_name, image_path):
+        try:
+            meta_dict = {"file_path": image_path, "file_name": image_name}
+            if without_img:
+                return meta_dict
+            img_dict = {}
+            image_path = os.path.join(image_name, image_path)
+            image = Image.open(image_path)
+            img_dict["image"] = image
+            meta_dict = {"file_path": image_path, "file_name": image_name}
+            img_dict["meta"] = meta_dict
+            return img_dict
+        except Exception as e:
+            print(f"Error loading {image_name}: {e}")
+
+    images = []
+    # Traverse the folder and subfolders (if enabled)
+    for root, _, files in os.walk(dir_path):
+        if image_name_list is None:
+            files = sorted(files)
+            for file_name in files:
+                if ignore_copy and "copy" in file_name.lower():
+                    continue
+                file_path = os.path.join(root, file_name)
+                images.append(process_image(file_name, file_path))
+        else:
+            image_name_list = sorted(image_name_list)
+            for file_name in image_name_list:
+                if file_name in files:
+                    if ignore_copy and "copy" in file_name.lower():
+                        continue
+                    file_path = os.path.join(root, file_name)
+                    images.append(process_image(file_name, file_path))
+
+        if not sub_dir:
+            # Break after processing the top-level folder if not searching subfolders
+            break
+
+    return images
+
+
+def get_images_from_directory(dir_path, sub_dir=False, without_img=False, ignore_copy=False):
+    return get_images_from_list(None, dir_path, sub_dir, without_img, ignore_copy)
+
+
+def find_next_id(folder_path):
+    # Initialize the highest ID as 0
+    highest_id = 0
+
+    # Regular expression to find 4-digit numbers in filenames
+    id_pattern = re.compile(r"\b(\d{4})\b")
+
+    # Flag to check if any ID was found
+    id_found = False
+
+    # Iterate over all files in the folder
+    for filename in os.listdir(folder_path):
+        # Search for a 4-digit ID in the filename
+        match = id_pattern.search(filename)
+        if match:
+            # Convert the found ID to an integer
+            current_id = int(match.group(1))
+            # Update the highest ID found
+            highest_id = max(highest_id, current_id)
+            id_found = True
+
+    # Increment the highest ID by 1 for the next ID
+    next_id = highest_id + 1 if id_found else 1
+    # Ensure the ID remains 4 digits long (leading zeros if needed)
+    next_id_str = f"{next_id:04}"
+
+    return next_id_str
+
+
+def sort_csv_by_column(csv_path, column_index, header=True):
+    """
+    Sort a CSV file by the values in a specific column. The sorted CSV file will overwrite the original file.
+
+    Parameters
+    ----------
+    csv_path : str
+        The path to the CSV file to be sorted.
+    column_index : int
+        The index of the column to sort by.
+    header : bool, optional
+        Whether the CSV file contains a header row with column names, by default True
+    """
+
+    # Read the CSV file into a list of rows
+    with open(csv_path, "r") as file:
+        rows = list(csv.reader(file))
+
+    # Sort the rows based on the values in the specified column
+    sorted_rows = sorted(rows[1:], key=lambda row: row[column_index])
+
+    # Add the header row back to the sorted list if it was present
+    if header:
+        sorted_rows.insert(0, rows[0])
+
+    # Write the sorted rows back to the original CSV file
+    with open(csv_path, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerows(sorted_rows)
+
+
+def extract_index(filename):
+    """
+    Extract the index from a filename in the format "image_index.jpg". Leading zeros are removed.
+
+    Parameters
+    ----------
+    filename : str
+        The filename to extract the index from.
+
+    Returns
+    -------
+    int
+        The extracted index as an integer.
+
+    Raises
+    ------
+    Warning
+        If the index is not found in the filename. In this case, the index 0 is returned.
+
+    """
+    index = filename.split("_")[1]
+    # remove the file extension
+    index = index.split(".")[0]
+    # remove the leading zeros
+    index = index.lstrip("0")
+    if index == "":
+        index = "0"
+        warnings.warn(f"Index not found in filename {filename}. Using index 0.")
+    index = int(index)
+    return index
