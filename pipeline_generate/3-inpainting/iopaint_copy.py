@@ -28,7 +28,7 @@ parser = argparse.ArgumentParser(description="Inpainting with iopaint")
 parser.add_argument(
     "-s",
     "--start",
-    default="0",
+    default=0,
     type=int,
     help="Image index to start from",
 )
@@ -36,8 +36,8 @@ parser.add_argument(
 parser.add_argument(
     "-d",
     "--device",
-    default="2",
-    type=str,
+    default=2,
+    type=int,
     help="Device to run the inpainting on",
 )
 
@@ -93,8 +93,8 @@ dataset = datasets[dataset_key]
 if args.id == "0000":
     segmentation_masks_path = f"/workspace/datasets/ISIC19/segmentation"
 else:
-    # TODO: change the structure of tehdata
-    segmentation_masks_path = f"{dataset['seg_path']}_dito/{args.id}"
+    # TODO: change the structure of the data
+    segmentation_masks_path = f"{dataset['seg_path']}_groundedRMBG-1.4/{args.id}"
 
 segmentation_masks = load_images(dir_path=segmentation_masks_path, ignore_copy=True)
 
@@ -107,6 +107,7 @@ output_dir2 = f"{dataset['inpainted_path']}/{args.id}"
 
 # Create output directories if they don't exist
 os.makedirs(output_dir, exist_ok=True)
+os.makedirs(output_dir2, exist_ok=True)
 
 prompt = "part of skin in homogenous skin color"
 # "part of skin"
@@ -150,8 +151,9 @@ for i, mask_dict in enumerate(tqdm(segmentation_masks)):
     original_img_size = image.size
 
     # Dilate the mask
-    dilated_mask = dilate_mask(Image.open(mask_url), kernel_size=5, iterations=5)
-    resized_img = image.resize(dilated_mask.shape[:2])
+    dilated_mask = dilate_mask(Image.open(mask_url), kernel_size=5, iterations=10)
+    resized_img = image.resize(dilated_mask.size)
+    # resized_img = image.resize(dilated_mask.shape[:2])
 
     with tempfile.TemporaryDirectory() as tmpdirname:
 
@@ -159,7 +161,7 @@ for i, mask_dict in enumerate(tqdm(segmentation_masks)):
         mask_path = os.path.join(tmpdirname, "mask.jpg")
         img_url = os.path.join(tmpdirname, file_name)
         # Save the dilated mask to the temporary file
-        cv2.imwrite(mask_path, dilated_mask)
+        cv2.imwrite(mask_path, np.array(dilated_mask))
         resized_img_array = np.array(resized_img)
         cv2.imwrite(img_url, cv2.cvtColor(resized_img_array, cv2.COLOR_RGB2BGR))
 
@@ -183,7 +185,7 @@ for i, mask_dict in enumerate(tqdm(segmentation_masks)):
         #!iopaint run --model="diffusers/stable-diffusion-xl-1.0-inpainting-0.1" --device={device} --image={img_url} --mask={mask_path} --output={output_dir_confounder2}
 
         image = Image.open(img_url)
-        mask = Image.fromarray(dilated_mask)
+        mask = dilated_mask
         image = image.resize((1024, 1024))
         mask = mask.resize((1024, 1024))
         # Run the diffuser
@@ -204,13 +206,3 @@ for i, mask_dict in enumerate(tqdm(segmentation_masks)):
         result.save(f"{output_dir2}/{file_name}")
 
         print(f"\033[31m Saved {output_dir2}/{file_name} \033[0m")
-
-
-# for image_dict in images_no_confounder:
-#   image = image_dict['image']
-#   meta_img = image_dict['meta']
-#   img_url = meta_img['file_path']
-
-#   # save image as PIL image
-#   img = Image.open(img_url)
-#   img.save(f"{output_dir_no_confounder}/{meta_img['file_name']}")

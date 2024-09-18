@@ -3,19 +3,9 @@ from llama_index.core import SimpleDirectoryReader
 import os
 import numpy as np
 from PIL import Image
-import sys
-import matplotlib.pyplot as plt
 import warnings
 import csv
-
-file_dir = os.getcwd()
-rrr_root = os.path.abspath(os.path.join(file_dir, "/workspace/home/rrr"))
-
-# Add the project root directory to sys.path
-if rrr_root not in sys.path:
-    sys.path.append(rrr_root)
-
-import rrr.decoy_mnist as decoy_mnist
+import h5py
 
 
 def load_images(
@@ -132,52 +122,6 @@ def load_images_and_combine(
     return images
 
 
-def save_mnist_images():
-    # Xr,Xtr --> orginial MNIST; X,Xt --> decoy MNIST; E,Et --> explanations
-    # y,yt --> same for decoy and orginial MNIST
-
-    Xr, X, y, E, Xtr, Xt, yt, Et = decoy_mnist.generate_dataset(
-        cachefile="../data/decoy-mnist.npz"
-    )
-    Xr = np.array([x.ravel() for x in Xr])
-    Xtr = np.array([x.ravel() for x in Xtr])
-
-    n_samples = 60000
-    X = X.reshape((n_samples, 1, 28, 28))
-    Xt = Xt.reshape((10000, 1, 28, 28))
-    E = E.reshape(n_samples, 1, 28, 28)
-    Xr = Xr.reshape((n_samples, 1, 28, 28))
-    Xtr = Xtr.reshape((10000, 1, 28, 28))
-    Et = Et.reshape(10000, 1, 28, 28)
-
-    def save_images(X, output_dir, n_images=None):
-        if n_images is None:
-            n_images = X.shape[0]
-        for i in range(n_images):
-            print(f"Saving image {i}")
-            plt.figure(figsize=(1, 1))
-            plt.imshow(X[i, 0], cmap="gray")
-            plt.axis("off")
-            plt.savefig(
-                os.path.join(output_dir, f"mnist_{i}.jpeg"),
-                bbox_inches="tight",
-                pad_inches=0,
-            )
-            plt.close()
-
-    output_dir_confounder = "/workspace/home/data/DecoyMNIST/confounder"
-    os.makedirs(output_dir_confounder, exist_ok=True)
-
-    output_dir_no_confounder = "/workspace/home/data/DecoyMNIST/no_confounder"
-    os.makedirs(output_dir_no_confounder, exist_ok=True)
-
-    save_images(X, output_dir_confounder, 1000)
-    save_images(Xr, output_dir_no_confounder, 1000)
-
-
-# save_mnist_images()
-
-
 def metadata_str2dict(string):
     # Split the string into lines
     lines = string.strip().split("\n")
@@ -193,13 +137,30 @@ def metadata_str2dict(string):
     return file_info_dict
 
 
+def create_file_names_list(folder_path):
+    file_list = os.listdir(folder_path)
+    return file_list
+
+
+def create_file_names_list_from_csv(csv_file_path, header=True, filter_func=None):
+    with open(csv_file_path, "r") as csv_file:
+        csv_reader = csv.reader(csv_file, delimiter=",")
+        if header:
+            next(csv_reader)
+        if filter_func is None:
+            file_list = [row[0] for row in csv_reader]
+        else:
+            file_list = [row[0] for row in csv_reader if filter_func(row)]
+    return file_list
+
+
 def get_images_from_list(
-    image_name_list, dir_path, sub_dir=False, without_img=False, ignore_copy=False
+    image_name_list, dir_path, sub_dir=False, with_img=False, ignore_copy=True
 ):
     def process_image(image_name, image_path):
         try:
             meta_dict = {"file_path": image_path, "file_name": image_name}
-            if without_img:
+            if not with_img:
                 return meta_dict
             img_dict = {}
             image_path = os.path.join(image_name, image_path)
@@ -237,8 +198,62 @@ def get_images_from_list(
     return images
 
 
-def get_images_from_directory(dir_path, sub_dir=False, without_img=False, ignore_copy=False):
-    return get_images_from_list(None, dir_path, sub_dir, without_img, ignore_copy)
+def get_images_from_directory(
+    dir_path, sub_dir=False, with_img=False, ignore_copy=True
+):
+    return get_images_from_list(None, dir_path, sub_dir, with_img, ignore_copy)
+
+
+def get_images_from_csv(
+    csv_file_path,
+    dir_path,
+    sub_dir=False,
+    with_img=False,
+    ignore_copy=True,
+    header=True,
+    filter_func=None,
+):
+    image_names = create_file_names_list_from_csv(csv_file_path, header, filter_func)
+    print(f"Found {len(image_names)} images in {csv_file_path}")
+    return get_images_from_list(image_names, dir_path, sub_dir, with_img, ignore_copy)
+
+
+def get_n_confounded_m_non_confounded_images(
+    dir_path, gt_label_csv_path, n, m, sub_dir=False, with_img=False, ignore_copy=True
+):
+    # Load the ground truth labels from the CSV file
+    with open(gt_label_csv_path, "r") as file:
+        reader = csv.reader(file)
+        # Skip the header row
+        next(reader)
+        gt_labels = {row[0]: row[1] for row in reader}
+
+    # Get the list of image names from csv file (in case images are in subdirectories)
+    image_names = list(gt_labels.keys())
+
+    # Get the images from the directory
+    images = get_images_from_list(image_names, dir_path, sub_dir, with_img, ignore_copy)
+
+    # Separate the images into confounded and non-confounded groups
+    confounded_images = []
+    non_confounded_images = []
+    n_confounded = 0
+    n_non_confounded = 0
+    for image in images:
+        if not with_img:
+            image_name = image["file_name"]
+        else:
+            image_name = image["meta"]["file_name"]
+        if gt_labels[image_name] == "1" and n_confounded <= n:
+            confounded_images.append(image)
+            n_confounded += 1
+        elif gt_labels[image_name] == "0" and n_non_confounded <= m:
+            non_confounded_images.append(image)
+            n_non_confounded += 1
+        if n_confounded > n and n_non_confounded > m:
+            break
+
+    return confounded_images, non_confounded_images
 
 
 def find_next_id(folder_path):
@@ -331,3 +346,27 @@ def extract_index(filename):
         warnings.warn(f"Index not found in filename {filename}. Using index 0.")
     index = int(index)
     return index
+
+
+def merge_csv_files(output_filename, input_filenames, sort=True, delete_merged=True):
+    with open(output_filename, "w", newline="") as out_file:
+        writer = csv.writer(out_file)
+        header_written = False
+        for filename in input_filenames:
+            with open(filename, "r") as in_file:
+                reader = csv.reader(in_file)
+                header = next(reader)
+                if not header_written:
+                    writer.writerow(header)
+                    header_written = True
+                for row in reader:
+                    writer.writerow(row)
+            if delete_merged:
+                os.remove(filename)
+        if sort:
+            sort_csv_by_column(output_filename, 0, header=True)
+
+
+def read_h5(h5_file_path):
+    with h5py.File(h5_file_path, "r") as f:
+        return {key: f[key][()] for key in f.keys()}

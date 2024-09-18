@@ -32,7 +32,6 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "-i",
     "--id",
     default=None,
     type=str,
@@ -40,12 +39,13 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "-c",
-    "--chunks",
+    "-nb",
+    "--num_batches",
     default=1,
     type=int,
     help="Number of chunks to split the dataset into",
 )
+
 
 if __name__ == "__main__":
 
@@ -101,6 +101,16 @@ if __name__ == "__main__":
     # csv file path
     csv_file = f"{output_dir}/sgl_pred.csv"
 
+    # check if file exists
+    if os.path.exists(csv_file):
+        # ask if the user wants to overwrite the file
+        overwrite = input(
+            f"The file {csv_file} already exists. Do you want to overwrite it? (y/n) "
+        )
+        if overwrite.lower() != "y":
+            print("Exiting the program.")
+            sys.exit()
+
     # Questions for (multi-turn) chat with model
     user_input_list = dataset["user_input_list"]
 
@@ -113,7 +123,7 @@ if __name__ == "__main__":
         images,
         user_input_list,
         output_for_true,
-        num_batches=args.chunks,
+        num_batches=args.num_batches,
         model_path=model_path,
         tokenizer_path=tokenizer_path,
         chat_template=chat_template,

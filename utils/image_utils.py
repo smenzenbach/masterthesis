@@ -1,3 +1,4 @@
+from operator import is_
 import numpy as np
 import cv2
 from PIL import Image
@@ -82,9 +83,14 @@ def plot_grid(figures, label=None, ncols=3, title=None, save_path=None):
 
 
 def dilate_mask(mask, kernel_size=5, iterations=1):
+    is_pil = isinstance(mask, Image.Image)
     mask = np.array(mask, dtype=np.uint8)
     kernel = np.ones((kernel_size, kernel_size), np.uint8)
-    return cv2.dilate(mask, kernel, iterations=iterations)
+    dilate_mask = cv2.dilate(mask, kernel, iterations=iterations)
+    if is_pil:
+        return Image.fromarray(dilate_mask)
+    else:
+        return dilate_mask
 
 
 def adjust_white_balance(tgt_img, ref_img):

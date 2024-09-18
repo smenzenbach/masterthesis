@@ -1,5 +1,6 @@
 import os, sys
 import cv2
+from httpx import head
 import numpy as np
 import warnings
 import csv
@@ -9,6 +10,7 @@ from PIL import Image
 project_root = os.path.abspath("..")  # Adjust this path if needed
 sys.path.append(project_root)
 
+from sympy import per
 from utils import dilate_mask
 
 
@@ -207,6 +209,14 @@ def percentage_gt_on_mask(mask, mask_gt):
         return percentage
 
 
+def percentage_hint_on_mask(mask, mask_hint):
+    """
+    Returns the percentage of pixels of the hint mask that are part of the mask.
+    Same as percentage_mask_on_gt but for hint mask.
+    """
+    return percentage_gt_on_mask(mask, mask_hint)
+
+
 def seg_percentage(gt_segmentation):
     """
     Returns the percentage of pixels that are part of the segmentation.
@@ -228,7 +238,9 @@ def seg_percentage(gt_segmentation):
     return np.sum(gt_segmentation) / gt_segmentation.size
 
 
-def write_seg_metrics_csv(csv_path, masks, gt_masks, dilation_function_params=None):
+def write_seg_metrics_csv(
+    csv_path, masks, gt_masks, hint_mask=None, dilation_function_params=None
+):
     """
     Generate a csv file with the segmentation evaluation metrics: IoU, Dice coefficient, pixel accuracy, percentage of mask on ground truth, and percentage of ground truth on mask.
 
@@ -240,6 +252,8 @@ def write_seg_metrics_csv(csv_path, masks, gt_masks, dilation_function_params=No
         A list of dictionaries containing the image objects and their metadata.
     gt_masks : output of load_images
         A list of dictionaries containing the image objects and their metadata.
+    hint_masks : optional
+        TODO: Add description
     dilation_function_params : dict, optional
         The parameters to pass to the dilation function. The default is None.
         {'kernel_size': dilation_kernel_size, 'iterations': dilation_iterations}
@@ -253,26 +267,29 @@ def write_seg_metrics_csv(csv_path, masks, gt_masks, dilation_function_params=No
         writer = csv.writer(csv_file)
 
         # Write header
-        writer.writerow(
-            [
-                "image_file_name",
-                "iou",
-                "dice_coefficient",
-                "pixel_accuracy",
-                "percentage_mask_on_gt",
-                "percentage_gt_on_mask",
-                "dilation_kernel_size",
-                "dilation_iterations",
-            ]
-        )
+        header = [
+            "image_file_name",
+            "iou",
+            "dice_coefficient",
+            "pixel_accuracy",
+            "percentage_mask_on_gt",
+            "percentage_gt_on_mask",
+            "dilation_kernel_size",
+            "dilation_iterations",
+        ]
+
+        if hint_mask is not None:
+            header.append("percentage_hint_on_mask")
+
+        writer.writerow(header)
 
         for mask_dict, mask_gt_dict in zip(masks, gt_masks):
-            image_file_name = mask_dict["meta"]["file_name"]
+            image_file_name = mask_dict["file_name"]
 
-            mask_url = mask_dict["meta"]["file_path"]
+            mask_url = mask_dict["file_path"]
             mask = Image.open(mask_url).convert("L")
 
-            mask_gt_url = mask_gt_dict["meta"]["file_path"]
+            mask_gt_url = mask_gt_dict["file_path"]
             mask_gt = Image.open(mask_gt_url).convert("L")
 
             # adapt mask and mask_gt size to same size (size of mask)
@@ -293,19 +310,24 @@ def write_seg_metrics_csv(csv_path, masks, gt_masks, dilation_function_params=No
             pixel_acc = pixel_accuracy(mask_np, mask_gt_np)
             mask_on_gt = percentage_mask_on_gt(mask_np, mask_gt_np)
             gt_on_mask = percentage_gt_on_mask(mask_np, mask_gt_np)
+            if hint_mask is not None:
+                hint_on_mask = percentage_hint_on_mask(mask_np, hint_mask)
 
-            writer.writerow(
-                [
-                    image_file_name,
-                    iou,
-                    dice,
-                    pixel_acc,
-                    mask_on_gt,
-                    gt_on_mask,
-                    dilation_function_params["kernel_size"],
-                    dilation_function_params["iterations"],
-                ]
-            )
+            metrics_row = [
+                image_file_name,
+                iou,
+                dice,
+                pixel_acc,
+                mask_on_gt,
+                gt_on_mask,
+                dilation_function_params["kernel_size"],
+                dilation_function_params["iterations"],
+            ]
+
+            if hint_mask is not None:
+                metrics_row.append(hint_on_mask)
+
+            writer.writerow(metrics_row)
 
 
 def write_avg_metrics_yaml_from_csv(csv_path, yaml_path):
@@ -333,6 +355,9 @@ def write_avg_metrics_yaml_from_csv(csv_path, yaml_path):
         pixel_acc_list = []
         mask_on_gt_list = []
         gt_on_mask_list = []
+        dilation_kernel_size = None
+        dilation_iterations = None
+        number_hint_filled = 0
 
         for row in reader:
             iou_list.append(float(row[1]))
@@ -340,6 +365,12 @@ def write_avg_metrics_yaml_from_csv(csv_path, yaml_path):
             pixel_acc_list.append(float(row[3]))
             mask_on_gt_list.append(float(row[4]))
             gt_on_mask_list.append(float(row[5]))
+            if dilation_kernel_size is None:
+                dilation_kernel_size = row[6]
+                dilation_iterations = row[7]
+            if len(row) > 8:
+                if float(row[8]) > 0:
+                    number_hint_filled += 1
 
         # Compute the average metrics
         mean_iou = np.mean(iou_list)
@@ -379,7 +410,9 @@ def write_avg_metrics_yaml_from_csv(csv_path, yaml_path):
                 f"mean_percentage_gt_on_mask: {mean_gt_on_mask:.3f}\n"
                 f"std_percentage_gt_on_mask: {std_gt_on_mask:.3f}\n"
                 f"median_percentage_gt_on_mask: {median_gt_on_mask:.3f}\n"
-                f"dilation_kernel_size: {row[6]}\n"
-                f"dilation_iterations: {row[7]}\n"
-                f"n_images: {len(iou_list)}"
+                f"dilation_kernel_size: {dilation_kernel_size}\n"
+                f"dilation_iterations: {dilation_iterations}\n"
+                f"n_images: {len(iou_list)}\n"
             )
+            if len(row) > 8:
+                yaml_file.write(f"n_hint_filled: {number_hint_filled}\n")

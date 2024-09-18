@@ -1,3 +1,5 @@
+import os
+import sys
 import sglang as sgl
 from sglang.lang.chat_template import get_chat_template
 import csv
@@ -5,10 +7,18 @@ import multiprocessing as mp
 import pandas as pd
 from tqdm import tqdm
 import numpy as np
+from PIL import Image
+import io
+
+# Add the project root directory to sys.path
+project_root = os.path.abspath("../..")  # Adjust this path if needed
+sys.path.append(project_root)
+
+from utils import sort_csv_by_column, create_label_from_output
 
 
 @sgl.function
-def _image_multi_turn(s, image_path, user_input_list):
+def _image_multi_turn(s, image, user_input_list):
     """
 
     Returns the generated answers to the user input questions.
@@ -16,8 +26,8 @@ def _image_multi_turn(s, image_path, user_input_list):
 
     Parameters
     ----------
-    image_path : str
-        The path to the image.
+    image : str, bytes, or PIL.Image
+        The image to be processed. The image can be a file path, bytes, or a PIL.Image object (not tested).
     user_input_list : list
         A list of user input questions.
 
@@ -26,11 +36,24 @@ def _image_multi_turn(s, image_path, user_input_list):
     list
         A list of generated answers.
     """
-    s += sgl.user(sgl.image(image_path))
+    s += sgl.user(sgl.image(image))
 
     for i, user_input in enumerate(user_input_list):
         s += sgl.user(user_input)
-        s += sgl.assistant(sgl.gen(f"output_{i+1}", max_tokens=256))
+        s += sgl.assistant(sgl.gen(f"output_{i+1}", max_tokens=256, temperature=0))
+
+
+def run_instance_sgl(img_dict, user_input_list, output_for_true):
+    image_file_path = img_dict["file_path"]
+
+    # Generate answers for the user input questions
+    state = _image_multi_turn.run(image_file_path, user_input_list)
+    outputs = [state[f"output_{i+1}"] for i in range(len(user_input_list))]
+
+    # Find predicted label
+    label = create_label_from_output(outputs[-1], output_for_true)
+
+    return outputs, label
 
 
 def chunks(lst, n):
@@ -39,65 +62,71 @@ def chunks(lst, n):
         yield split
 
 
-def build_pred_csv_sgl(
+def build_pred_csv_sgl_batch(
     csv_path,
     images,
     user_input_list,
     output_for_true,
     num_batches=1,
     save_interval=1,
+    resize_size=None,  # Add resize dimensions as a parameter
 ):
     """
     Generate a csv file with the image file names and their corresponding labels (1 for confounder and 0 for no confounder).
 
-    The user input questions are stored in a list. The number of items in the list determine the number QA turns.
+    User inputs are provided in a list. The number of items in the list determine the number of QA turns.
 
-    ###Using sgl:
-    Ensure that the sgl server is running before calling this function. The sgl server can be started by running the following command in the terminal:
-    ```
-    python3 -m sglang.launch_server --model-path liuhaotian/llava-v1.6-vicuna-7b --tokenizer-path llava-hf/llava-1.5-7b-hf --chat-template vicuna_v1.1 --port 30000
-    ```
-    The model-path, tokenizer-path, chat-template, and port can be changed to the desired values.
-    Also set the runtime endpoint to the sgl server by adding the following line of code before calling this function:
-    ```
-    sgl.set_default_backend(sgl.RuntimeEndpoint("http://localhost:30000"))
-    ```
-    The port number should match the port number used to start the sgl server.
-
+    ### Using sgl:
+    Ensure that the sgl server is running before calling this function. Set the runtime endpoint to the sgl server before calling this function.
 
     Parameters
     ----------
     csv_path : str
         The path to save the csv file.
-    images: output of load_images_from_directory
+    images: list of dict
         A list of dictionaries containing the image objects and their metadata.
     user_input_list : list
         A list of user input questions given to the sgl function.
     output_for_true : list
-        A list of outputs that correspond to a label of 1: confounder is present.
+        A list of outputs that correspond to a label of 1 (confounder is present).
+    num_batches : int, optional
+        Number of batches to process, by default 1.
+    save_interval : int, optional
+        Save interval for batches intermediate results, by default 1.
+    resize_size : tuple, optional
+        Target size for image resizing (width, height), by default None.
 
     Returns
     -------
     None
     """
 
-    def create_label_from_output(output, output_for_true):
-        output = output.lower().replace(" ", "")
-        if output in output_for_true:
-            return 1
-        else:
-            return 0
-
     data = []
     for batch_index, img_dicts in enumerate(
         tqdm(chunks(images, num_batches), total=num_batches)
     ):
-        inp = [
-            {"image_path": ip, "user_input_list": user_input_list}
-            for ip in [img_dict["file_path"] for img_dict in img_dicts]
-        ]
+        inp = []
+
+        for img_dict in img_dicts:
+            image_path = img_dict["file_path"]
+            image_file_name = img_dict["file_name"]
+
+            if resize_size is None:
+                inp.append({"image": image_path, "user_input_list": user_input_list})
+
+            else:
+                # Open image, resize it in memory and convert to bytes
+                with Image.open(image_path) as img:
+                    img_resized = img.resize(resize_size)
+                    img_byte_arr = io.BytesIO()
+                    img_resized.save(img_byte_arr, format="JPEG")
+                    img_byte_arr = img_byte_arr.getvalue()  # Image as bytes
+
+                inp.append({"image": img_byte_arr, "user_input_list": user_input_list})
+
         # Generate answers for the user input questions
-        states = _image_multi_turn.run_batch(inp, max_new_tokens=128, temperature=0)
+        states = _image_multi_turn.run_batch(inp)
+
         for idx, img_dict in enumerate(img_dicts):
             image_file_name = img_dict["file_name"]
             outputs = [
@@ -108,8 +137,8 @@ def build_pred_csv_sgl(
             label = create_label_from_output(outputs[-1], output_for_true)
 
             data.append([image_file_name, label, outputs])
-            # Save intermediate results every `save_interval` batches
 
+        # Save intermediate results every `save_interval` batches
         if (batch_index + 1) % save_interval == 0 or batch_index == num_batches - 1:
             temp_df = pd.DataFrame(
                 data, columns=["image_file_name", "label", "outputs"]
@@ -120,7 +149,39 @@ def build_pred_csv_sgl(
     # Final save
     df = pd.DataFrame(data, columns=["image_file_name", "label", "outputs"])
     df.to_csv(csv_path, index=False)
+    # Sort the CSV file by the first column (image_file_name)
+    sort_csv_by_column(csv_path, column_index=0, header=True)
     print(f"Final data saved to {csv_path}")
+
+
+def build_pred_csv_sgl(
+    csv_path,
+    images,
+    user_input_list,
+    output_for_true,
+):
+    """For testing"""
+
+    with open(csv_path, mode="a") as csv_file:
+        writer = csv.writer(csv_file)
+
+        # Write header if not existend
+        if csv_file.tell() == 0:
+            writer.writerow(["image_file_name", "label", "outputs"])
+
+        for img_dict in images:
+            image_file_name = img_dict["file_name"]
+
+            # Generate answers for the user input questions
+            outputs, label = run_instance_sgl(
+                img_dict, user_input_list, output_for_true
+            )
+
+            # Write to csv
+            writer.writerow([image_file_name, label, outputs])
+
+    # Sort the CSV file by the first column (image_file_name)
+    sort_csv_by_column(csv_path, column_index=0, header=True)
 
 
 def build_pred_csv_sgl_with_backend(
@@ -128,7 +189,7 @@ def build_pred_csv_sgl_with_backend(
     images,
     user_input_list,
     output_for_true,
-    num_batches=1,
+    num_batches=1,  # if None then no batching
     save_interval=1,
     model_path="liuhaotian/llava-v1.6-vicuna-7b",
     tokenizer_path="llava-hf/llava-1.5-7b-hf",
@@ -142,27 +203,20 @@ def build_pred_csv_sgl_with_backend(
     runtime.endpoint.chat_template = get_chat_template(chat_template)
     sgl.set_default_backend(runtime)
 
-    build_pred_csv_sgl(
-        csv_path, images, user_input_list, output_for_true, num_batches, save_interval
-    )
+    if num_batches is None:
+        build_pred_csv_sgl(csv_path, images, user_input_list, output_for_true)
+    else:
+        build_pred_csv_sgl_batch(
+            csv_path,
+            images,
+            user_input_list,
+            output_for_true,
+            num_batches,
+            save_interval,
+        )
 
     # shutdown sgl server
     runtime.shutdown()
-
-
-def merge_csv_files(output_filename, input_filenames):
-    with open(output_filename, "w", newline="") as out_file:
-        writer = csv.writer(out_file)
-        header_written = False
-        for filename in input_filenames:
-            with open(filename, "r") as in_file:
-                reader = csv.reader(in_file)
-                header = next(reader)
-                if not header_written:
-                    writer.writerow(header)
-                    header_written = True
-                for row in reader:
-                    writer.writerow(row)
 
 
 # def build_pred_csv_sgl(
@@ -236,8 +290,7 @@ def merge_csv_files(output_filename, input_filenames):
 
 #             # Generate answers for the user input questions
 #             state = _image_multi_turn.run(
-#                 image_file_path, user_input_list, max_new_tokens=128, temperature=0
-#             )
+#                 image_file_path, user_input_list)
 #             outputs = [state[f"output_{i+1}"] for i in range(len(user_input_list))]
 
 #             # Find predicted label

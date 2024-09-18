@@ -1,3 +1,4 @@
+from calendar import c
 import os
 import sys
 import warnings
@@ -16,7 +17,7 @@ project_root = os.path.abspath("..")  # Adjust this path if needed
 sys.path.append(project_root)
 
 from utils import nms_grounded, remove_big_box_grounded, remove_small_box_grounded
-from utils import load_images_and_combine, extract_index
+from utils import get_images_from_csv, extract_index, find_next_id
 
 
 parser = argparse.ArgumentParser(description="Perform confounder detection")
@@ -32,7 +33,7 @@ parser.add_argument(
     "--id",
     default=None,
     type=str,
-    help="ID number for the output directory. If not given the next available ID will be used.",
+    help="ID tag for the output directory. If not given the next available ID number (4 digits) will be used.",
 )
 
 
@@ -98,12 +99,16 @@ def run(
         # pre process the image for segmentation
         # crop the image to the bounding box of the object
         cropped_image = image.crop(box)
+
         # run the segmentation model
-        pillow_mask = segmentation_pipe(cropped_image, return_mask=True)
+        pil_mask = segmentation_pipe(cropped_image, return_mask=True)
+
+        # make pil_mask a binary mask
+        pil_mask = pil_mask.convert("L").point(lambda x: 255 if x > 128 else 0)
 
         # Resize the segmentation mask to the size of the bounding box
         x1, y1, x2, y2 = map(int, box)
-        resized_mask = pillow_mask.resize((x2 - x1, y2 - y1))
+        resized_mask = pil_mask.resize((x2 - x1, y2 - y1))
 
         # Create a mask of the same size as the original image, filled with 0 (background)
         temp_mask = Image.new("L", image.size, 0)
@@ -140,14 +145,15 @@ if __name__ == "__main__":
     dataset_key = "ISIC2019"
     dataset = datasets[dataset_key]
 
-    # load the ground truth, predicted segmentations and images
-    images_path = f"/workspace/home/data/{datasets[dataset_key]['dataset_dir']}/raw"
+    # load the images that should be segmented
+    images_path = dataset["raw_path"]
+    csv_path = f"/workspace/home/data/ISIC2019/gt_label.csv"
 
-    images = load_images_and_combine(
-        dir_path=images_path,
-        confounder_dir=dataset["confounder_dir"],
-        no_confounder_dir=dataset["no_confounder_dir"],
+    images = get_images_from_csv(
+        csv_path, images_path, filter_func=lambda row: row[1] == "1"
     )
+
+    print(f"Found {len(images)} images to process.")
 
     # build grounding dino from huggingface
     model_id = "IDEA-Research/grounding-dino-tiny"
@@ -163,10 +169,17 @@ if __name__ == "__main__":
         device=device,
     )
 
+    savedir = f"/workspace/home/data/{datasets[dataset_key]['dataset_dir']}/seg_groundedRMBG-1.4/"
+    if args.id is None:
+        id_tag = find_next_id(savedir)
+    else:
+        id_tag = args.id
+    savedir += f"{id_tag}/"
+
     for i, image_dict in tqdm(enumerate(images)):
 
-        image_path = image_dict["meta"]["file_path"]
-        image_name = image_dict["meta"]["file_name"]
+        image_path = image_dict["file_path"]
+        image_name = image_dict["file_name"]
         # Check for cats and remote controls
         # VERY important: text queries need to be lowercased + end with a dot
         custom_vocabulary = dataset["custom_vocabulary"]
@@ -175,9 +188,8 @@ if __name__ == "__main__":
         if args.start is not None and extract_index(image_name) < args.start:
             continue
 
-        savedir = f"/workspace/home/data/{datasets[dataset_key]['dataset_dir']}/seg_groundedRMBG"
         os.makedirs(savedir, exist_ok=True)
-        savepath = f"{savedir}/{image_dict['meta']['file_name']}"
+        savepath = f"{savedir}/{image_dict['file_name']}"
 
         # skip already processed images
         if os.path.exists(savepath):

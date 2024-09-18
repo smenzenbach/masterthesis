@@ -1,0 +1,16 @@
+[dataset]
+name = "ISIC2019"
+yaml_file = "/workspace/home/data/datasets.yaml"
+
+[confounder_detection]
+num_batches = 50
+model_path = "liuhaotian/llava-v1.6-vicuna-7b"
+tokenizer_path = "llava-hf/llava-1.5-7b-hf"
+chat_template = "vicuna_v1.1"
+
+[segmentation]
+model = "dito" # ["groundedRMBG", "groundedSam2", "dito", "vlm"]
+
+
+[inpainting]
+model = "iopaint_lama_sdxl"

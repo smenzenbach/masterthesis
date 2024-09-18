@@ -128,6 +128,11 @@ RUN pip install flashinfer -i https://flashinfer.ai/whl/cu121/torch2.4/
 RUN pip install diffusers
 RUN pip install iopaint
 
+# training
+RUN pip install captum
+RUN pip install lime
+
+
 
 # setup the workspace
 RUN mkdir -p /workspace
