@@ -10,13 +10,14 @@ import yaml
 import tempfile
 import cv2
 import subprocess
+import toml
 
 
 # Add the project root directory to sys.path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
-from utils import get_images_from_directory, load_images, extract_index
+from utils import get_images_from_directory, extract_index
 from utils import mask_on_image, dilate_mask, plot_grid
 
 import argparse
@@ -25,6 +26,11 @@ import argparse
 # +
 # __import__("pdb").set_trace()
 parser = argparse.ArgumentParser(description="Inpainting with iopaint")
+
+parser.add_argument(
+    "--config", required=True, type=str, help="Path to the configuration file"
+)
+
 parser.add_argument(
     "-s",
     "--start",
@@ -41,15 +47,9 @@ parser.add_argument(
     help="Device to run the inpainting on",
 )
 
-parser.add_argument(
-    "--id",
-    default="0000",
-    type=str,
-    help="ID number of experiment",
-)
-
 
 args = parser.parse_args()
+
 
 # set the device
 # extract number from device string
@@ -78,38 +78,47 @@ pipe.enable_attention_slicing()  # Recommended if your computer has < 64 GB of R
 
 generator = torch.Generator(device2).manual_seed(0)
 
+# Load the configuration file
+config = toml.load(args.config)
 
-# Load the YAML file into a dictionary
-dataset_yaml_file = "/workspace/home/data/datasets.yaml"
+# get id that is between "_" and "." in the config file name
+id_tag = int(args.config.split("_")[-1].split(".")[0])
+
+# Load YAML file into a dictionary
+dataset_name = config["dataset"]["name"]
+dataset_yaml_file = config["dataset"]["yaml_file"]
 with open(dataset_yaml_file, "r") as file:
     datasets = yaml.safe_load(file)
 
-# Load images
-dataset_key = "ISIC2019"  # 'Pascal_VOC07' #
-dataset = datasets[dataset_key]
-# images_confounder, images_no_confounder = load_images(dir_path=f"/workspace/home/data/{dataset['dataset_dir']}/raw", confounder_dir=dataset['confounder_dir'], no_confounder_dir=dataset['no_confounder_dir'])
-# segmentation_masks_confounder, _ = load_images(dir_path=f"/workspace/home/data/{dataset['dataset_dir']}/seg", confounder_dir=dataset['confounder_dir'], no_confounder_dir=dataset['no_confounder_dir'])
+# get dataset
+dataset = datasets[dataset_name]
 
-if args.id == "0000":
-    segmentation_masks_path = f"/workspace/datasets/ISIC19/segmentation"
+# get path with segmentation masks
+# check which segmentation results should be used
+if "use_existing" in config["segmentation"]:
+    segmentation_id = config["segmentation"]["use_existing"]
+    if segmentation_id == "gt":
+        segmentation_masks_path = dataset["gt_seg_path"]
+    else:
+        segmentation_masks_path = f"/workspace/home/pipeline_outputs/{config["dataset"]["name"]}/{segmentation_id}/seg"
 else:
-    # TODO: change the structure of the data
-    segmentation_masks_path = f"{dataset['seg_path']}_groundedRMBG-1.4/{args.id}"
-
-segmentation_masks = load_images(dir_path=segmentation_masks_path, ignore_copy=True)
+    segmentation_masks_path = f"/workspace/home/pipeline_outputs/{config["dataset"]["name"]}/{id_tag}/seg"
 
 
-output_dir = f"/workspace/home/outputfiles/{dataset['dataset_dir']}/inpainting/iopaint/{args.id}/{init_model}"
+segmentation_masks = get_images_from_directory(dir_path=segmentation_masks_path, ignore_copy=True)
 
 
-output_dir2 = f"{dataset['inpainted_path']}/{args.id}"
+output_dir = f"/workspace/home/pipeline_outputs/{config["dataset"]["name"]}/{id_tag}/inpainting_intermediate"
+
+
+output_dir2 = f"/workspace/home/pipeline_outputs/{config["dataset"]["name"]}/{id_tag}/inpainting"
 # output_dir_no_confounder = os.path.join(output_dir, dataset['no_confounder_dir'])
 
 # Create output directories if they don't exist
 os.makedirs(output_dir, exist_ok=True)
 os.makedirs(output_dir2, exist_ok=True)
 
-prompt = "part of skin in homogenous skin color"
+prompt = config["inpainting"]["prompt"]
 # "part of skin"
 # "remove the confounder"
 # ""
@@ -151,7 +160,9 @@ for i, mask_dict in enumerate(tqdm(segmentation_masks)):
     original_img_size = image.size
 
     # Dilate the mask
-    dilated_mask = dilate_mask(Image.open(mask_url), kernel_size=5, iterations=10)
+    kernel_size = config["inpainting.dilation"]["kernel_size"]
+    iterations = config["inpainting.dilation"]["iterations"]
+    dilated_mask = dilate_mask(Image.open(mask_url), kernel_size=kernel_size, iterations=iterations)
     resized_img = image.resize(dilated_mask.size)
     # resized_img = image.resize(dilated_mask.shape[:2])
 

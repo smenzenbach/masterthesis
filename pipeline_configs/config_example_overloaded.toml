@@ -1,0 +1,45 @@
+[dataset]
+name = "ISIC2019"
+yaml_file = '/workspace/home/data/datasets.yaml'
+
+[confounder_classification]
+use_existing = '0001'             # config id of which confounder classification results to use, or 'gt' for ground truth labels
+model = 'gpt4'                    # ["gpt4", "sgl"]
+output_for_true = ["yes", "yes."]
+
+[confounder_classification.gpt4]
+prompt = "This image is from a set of images from skin lesions. We want to identify whether there are confounding factors in the images of this dataset. We identified that colored patches (also called stickers) are confounding factors in this dataset. Is there such a colored patch in this image? Please reply with 'yes' or 'no'."
+
+[confounder_classification.sgl]
+num_batches = 50
+model_path = "liuhaotian/llava-v1.6-vicuna-7b"
+tokenizer_path = "llava-hf/llava-1.5-7b-hf"
+chat_template = "vicuna_v1.1"
+user_input_list = [
+    "The image shows a close-up from a skin lesion. Is there something on the image that does not seem like it is part of the skin? I don't mean the lesion, but something else contrasting. Please explain.",
+    "Can you tell me, considering your explanation, if you see a coloful, ellipsoid, contrasting object attached on the skin or not? Answer with one word of the options [yes, no]",
+]
+
+[segmentation]
+use_existing = '0001' # config id of which segmentation results to use, or 'gt' for ground truth segmentation
+model = 'dito' # ["groundedRMBG", "groundedSam2", "dito", "vlm"]
+custom_voabulary = [
+    "colorful patch",
+    "colorful sticker",
+    "colorful circle",
+    "colorful cutted circle",
+]
+
+[segmentation.dito]
+confidence_threshold = 0.0007
+
+[segmentation.groundedRMBG]
+
+
+[inpainting]
+model = 'iopaint_lama_sdxl'
+prompt = "part of skin in homogenous skin color"
+
+[inpainting.dilation]
+kernel_size = 5
+iterations = 10

@@ -17,6 +17,7 @@ parser = argparse.ArgumentParser(description="Pipeline")
 
 parser.add_argument(
     "--config",
+    required=True,
     type=str,
     help="Path to the configuration file",
 )
@@ -30,7 +31,7 @@ args = parser.parse_args()
 config = toml.load(args.config)
 
 # get id that is between "_" and "."
-id_num = int(args.config.split("_")[-1].split(".")[0])
+id_tag = int(args.config.split("_")[-1].split(".")[0])
 
 
 #########################################
@@ -53,7 +54,7 @@ dataset = datasets[dataset_name]
 #                                       #
 #########################################
 
-raw_images = get_images_from_directory(dataset["raw_path"], without_img=True)
+raw_images = get_images_from_directory(dataset["raw_path"])
 
 if config["segmentation"]["model"] == "vlm":
     raise NotImplementedError("VLM segmentation is not implemented yet")

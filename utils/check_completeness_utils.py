@@ -35,9 +35,9 @@ def compare_file_lists(files_currently_processed, files_to_be_processed):
     return missing_files, copied_files
 
 
-def get_missing_indices_gt(gt_files):
+def get_not_existent_indices_gt(gt_files):
     """
-    Get the missing indices in the ground truth files, i.e., indices that are not existing and break the incrementing sequence.
+    Get the ground truth files indices that are not existing and break the incrementing sequence.
     """
     indices = file_name_to_index(gt_files)
 
