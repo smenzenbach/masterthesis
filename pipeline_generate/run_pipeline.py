@@ -1,19 +1,7 @@
-import os
-import sys
-import csv
-import yaml
-import toml
-
-# Add the project root directory to sys.path
-project_root = os.path.abspath("..")  # Adjust this path if needed
-sys.path.append(project_root)
-
-from utils import get_images_from_directory, get_images_from_list
-
+import subprocess
 import argparse
 
 parser = argparse.ArgumentParser(description="Pipeline")
-
 
 parser.add_argument(
     "--config",
@@ -21,52 +9,59 @@ parser.add_argument(
     type=str,
     help="Path to the configuration file",
 )
+
+parser.add_argument(
+    "-nb",
+    "--num_blocks",
+    default=None,
+    type=int,
+    help="Number of blocks to split the data into",
+)
+
+parser.add_argument(
+    "--devices",
+    nargs="+",
+    default=[2],
+    type=int,
+    help="Number of devices to run the script on",
+)
 args = parser.parse_args()
 
-#########################################
-#                                       #
-#    Load config and extract id         #
-#                                       #
-#########################################
-config = toml.load(args.config)
+# Run confounder classification
+subprocess.run(
+    f"python home01/pipeline_generate/1-confounder_classification/run_confounder_classification.py --config {args.config} --device {args.devices[0]}",
+    shell=True,
+    check=True,
+)
 
-# get id that is between "_" and "."
-id_tag = int(args.config.split("_")[-1].split(".")[0])
+# Wait for confounder classification to finish
 
-
-#########################################
-#                                       #
-#             Load dataset              #
-#                                       #
-#########################################
-
-# Load the YAML file into a dictionary
-dataset_name = config["dataset"]["name"]
-dataset_yaml_file = config["dataset"]["yaml_file"]
-with open(dataset_yaml_file, "r") as file:
-    datasets = yaml.safe_load(file)
-
-dataset = datasets[dataset_name]
-
-#########################################
-#                                       #
-#                run vlm                #
-#                                       #
-#########################################
-
-raw_images = get_images_from_directory(dataset["raw_path"])
-
-if config["segmentation"]["model"] == "vlm":
-    raise NotImplementedError("VLM segmentation is not implemented yet")
+# Run segmentation
+if args.num_blocks is None:
+    subprocess.run(
+        f"python home01/pipeline_generate/2-segmentation/run_segmentation.py --config {args.config} --device {args.devices[0]}",
+        shell=True,
+        check=True,
+    )
 else:
-    num_batches = config["confounder_detection"]["num_batches"]
-    model_path = config["confounder_detection"]["model_path"]
-    tokenizer_path = config["confounder_detection"]["tokenizer_path"]
-    output_path = config["confounder_detection"]["output_path"]
+    subprocess.run(
+        f"python home01/pipeline_generate/multiprocessing_script.py --config {args.config} --script segmentation --num_blocks {args.num_blocks} --devices {' '.join(map(str, args.devices))}",
+        shell=True,
+        check=True,
+    )
 
+# Wait for segmentation to finish
 
-#########################################
-#                                       #
-#           run segmentation            #
-#                                       #
-#########################################
+# Run inpainting
+if args.num_blocks is None:
+    subprocess.run(
+        f"python home01/pipeline_generate/3-inpainting/run_inpainting.py --config {args.config} --device {args.devices[0]}",
+        shell=True,
+        check=True,
+    )
+else:
+    subprocess.run(
+        f"python home01/pipeline_generate/multiprocessing_script.py --config {args.config} --script inpainting --num_blocks {args.num_blocks} --devices {' '.join(map(str, args.devices))}",
+        shell=True,
+        check=True,
+    )

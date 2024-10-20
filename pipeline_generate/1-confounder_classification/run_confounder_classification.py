@@ -5,7 +5,8 @@ import toml
 
 # Add the project root directory to sys.path
 project_root = os.path.abspath("../..")  # Adjust this path if needed
-sys.path.append(project_root)
+if project_root not in sys.path:
+    sys.path.append(project_root)
 
 from utils import (
     create_file_names_list,
@@ -15,7 +16,7 @@ from utils import (
     extract_index,
 )
 from confounder_classification_sgl import build_pred_csv_sgl_with_backend
-from confounder_classification_gpt4 import build_pred_csv_gpt4
+from confounder_classification_gpt4 import build_pred_csv_gpt4_parallel
 
 import argparse
 
@@ -43,11 +44,13 @@ if __name__ == "__main__":
 
     # check if existing confounder classificaton should be used
     if "use_existing" in config["confounder_classification"]:
-        print("Using existing confounder classification. Exiting the program.")
+        print(
+            f"Using existing confounder classification from {config['confounder_classification']['use_existing']}. Exiting the program."
+        )
         sys.exit()
 
-    # get id that is between "_" and "." in the config file name
-    id_tag = int(args.config.split("_")[-1].split(".")[0])
+    # get id that is between the first "_" and "." in the config file name
+    id_tag = args.config.split("/")[-1].split("_", 1)[1].split(".")[0]
 
     # Load YAML file into a dictionary
     dataset_name = config["dataset"]["name"]
@@ -56,7 +59,8 @@ if __name__ == "__main__":
         datasets = yaml.safe_load(file)
 
     # get dataset
-    dataset = datasets[dataset_name]
+    dataset_key = "ISIC2019"
+    dataset = datasets[dataset_key]
 
     # get images
     images_path = dataset["raw_path"]
@@ -74,7 +78,9 @@ if __name__ == "__main__":
         images = get_images_from_list(image_names, images_path)
 
     # set output dir
-    output_dir = f"/workspace/home/pipeline_outputs/{config["dataset"]["name"]}/{id_tag}"
+    output_dir = (
+        f"/workspace/home/pipeline_outputs/{config['dataset']['name']}/{id_tag}"
+    )
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -95,15 +101,24 @@ if __name__ == "__main__":
     output_for_true = config["confounder_classification"]["output_for_true"]
 
     # retrieve used model
-    model = config["confounder_classification"]["model"]
+    model_name = config["confounder_classification"]["model"]
 
-    if model == "sgl":
-        model_path = config["confounder_classification.sgl"]["model_path"]
-        tokenizer_path = config["confounder_classification.sgl"]["tokenizer_path"]
-        chat_template = config["confounder_classification.sgl"]["chat_template"]
+    print(f"Start running confounder classification with model: {model_name}")
+
+    if model_name == "sgl":
+        model_path = config["confounder_classification"][model_name]["model_path"]
+
+        tokenizer_path = config["confounder_classification"][model_name].get(
+            "tokenizer_path", None
+        )
+        chat_template = config["confounder_classification"][model_name].get(
+            "chat_template", None
+        )
 
         # Questions for (multi-turn) chat with model
-        user_input_list = config["confounder_classification.sgl"]["user_input_list"]
+        user_input_list = config["confounder_classification"][model_name][
+            "user_input_list"
+        ]
 
         # Build the prediction CSV using sgl
         build_pred_csv_sgl_with_backend(
@@ -111,7 +126,7 @@ if __name__ == "__main__":
             images,
             user_input_list,
             output_for_true,
-            num_batches=args.num_batches,
+            num_batches=config["confounder_classification"]["num_batches"],
             model_path=model_path,
             tokenizer_path=tokenizer_path,
             chat_template=chat_template,
@@ -128,16 +143,17 @@ if __name__ == "__main__":
             "output_for_true": output_for_true,
         }
 
-    elif model == "gpt4":
-        prompt = config["confounder_classification.gpt4"]["prompt"]
+    elif model_name == "gpt4":
+        prompt = config["confounder_classification"][model_name]["prompt"]
         # TODO: maybe change to user_input_list[0] or something similar
 
         # Build the prediction CSV using gpt4
-        build_pred_csv_gpt4(
+        build_pred_csv_gpt4_parallel(
             csv_file,
             images,
             prompt,
             output_for_true,
+            num_workers=config["confounder_classification"]["num_batches"],
         )
 
         # Generate meta data yaml file

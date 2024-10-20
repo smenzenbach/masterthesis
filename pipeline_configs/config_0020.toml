@@ -1,0 +1,23 @@
+[dataset]
+name = "ISIC2019"
+yaml_file = '/workspace/home/data/datasets.yaml'
+
+[confounder_classification]
+use_existing = 'gt'
+
+[segmentation]
+model = 'groundedRMBG'
+custom_voabulary = [
+    "colorful patch",
+    "colorful sticker",
+    "colorful circle",
+    "colorful cutted circle",
+]
+
+[inpainting]
+model = 'iopaint_lama_sdxl'
+prompt = "part of skin in homogenous skin color"
+
+[inpainting.dilation]
+kernel_size = 5
+iterations = 10

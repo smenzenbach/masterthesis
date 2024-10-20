@@ -96,6 +96,7 @@ def get_completness_status(
         files_currently_processed, files_to_be_processed
     )
 
+    print("Number of files to be processed: ", len(files_to_be_processed))
     print("Copied files: ", copied_files)
     if print_missing_files:
         print("Missing files: ", missing_files)
@@ -103,11 +104,13 @@ def get_completness_status(
 
     if missing_files:
         print_block_status(missing_files, blocks)
+        return False  # not all files processed
     else:
         assert len(files_currently_processed) == len(files_to_be_processed) - len(
             copied_files
         ), f"Number of files currently processed: {len(files_currently_processed)}, Number of files to be processed: {len(files_to_be_processed)}"
         print("All files processed.")
+        return True  # all files processed
 
 
 def get_blocks(files_currently_processed, files_to_be_processed, num_blocks):

@@ -1,0 +1,18 @@
+[dataset]
+name = "ISIC2019"
+yaml_file = '/workspace/home/data/datasets.yaml'
+
+[confounder_classification]
+use_existing = 'gt'
+
+[segmentation]
+use_existing = '0004'
+
+
+[inpainting]
+model = 'iopaint_lama_sdxl'
+prompt = "part of skin in homogenous skin color"
+
+[inpainting.dilation]
+kernel_size = 15
+iterations = 10

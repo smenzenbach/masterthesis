@@ -835,7 +835,7 @@ def remove_big_box_dito(
     return detection_result
 
 
-def nms_grounded(
+def nms_grounding(
     detection_result: List[Dict[str, Any]],
     iou_threshold: float = 0.5,
 ) -> torch.Tensor:
@@ -880,7 +880,7 @@ def nms_grounded(
 # ----------------------------------- #
 
 
-def remove_small_box_grounded(
+def remove_small_box_grounding(
     detection_result: List[Dict[str, Any]],
     image_shape: Tuple[int, int],
     area_threshold: float = 0.1,
@@ -900,12 +900,12 @@ def remove_small_box_grounded(
         }
     ]
     """
-    return remove_big_box_grounded(
+    return remove_big_box_grounding(
         detection_result, image_shape, area_threshold, remove_small_box=True
     )
 
 
-def remove_big_box_grounded(
+def remove_big_box_grounding(
     detection_result: List[Dict[str, Any]],
     image_shape: Tuple[int, int],
     area_threshold: float = 0.9,

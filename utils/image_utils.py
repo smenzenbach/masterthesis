@@ -6,14 +6,32 @@ import matplotlib.pyplot as plt
 
 
 def mask_on_image(image, segmentation_map):
+    """
+    Overlay a segmentation map on an image.
+
+    Parameters:
+    ----------
+    image : PIL.Image.Image or np.ndarray
+        The base image.
+    segmentation_map : PIL.Image.Image or np.ndarray
+        The segmentation map to overlay on the image.
+
+    Returns:
+    -------
+    PIL.Image.Image or np.ndarray
+        The image with the segmentation map overlayed in the same format as the input.
+    """
     if isinstance(image, Image.Image):
         pil = True
         # Convert images to numpy arrays
         image_np = np.array(image)
-        segmentation_map_np = np.array(segmentation_map)
     else:
         pil = False
         image_np = image
+
+    if isinstance(segmentation_map, Image.Image):
+        segmentation_map_np = np.array(segmentation_map)
+    else:
         segmentation_map_np = segmentation_map
 
     # Ensure the segmentation map is in grayscale
@@ -28,14 +46,14 @@ def mask_on_image(image, segmentation_map):
 
     # Create a colored overlay for the segmentation map
     colored_overlay = np.zeros_like(image_np)
-    colored_overlay[segmentation_map_np == 255] = [
+    colored_overlay[segmentation_map_np > 128] = [
         255,
         0,
-        0,
-    ]  # Red color for the segmentation
+        255,
+    ]  # Pink color for the segmentation
 
     # Combine the images with some transparency for the overlay
-    alpha = 0.5  # Transparency factor
+    alpha = 0.6  # Transparency factor
     combined_image = cv2.addWeighted(image_np, 1, colored_overlay, alpha, 0)
 
     if pil:
@@ -46,6 +64,22 @@ def mask_on_image(image, segmentation_map):
 
 
 def plot_grid(figures, label=None, ncols=3, title=None, save_path=None):
+    """
+    Plot a grid of images with their corresponding labels.
+
+    Parameters:
+    ----------
+    figures : list
+        A list of images to plot.
+    label : list, Optional
+        A list of labels for each image.
+    ncols : int, Optional
+        The number of columns in the grid.
+    title : str, Optional
+        The title of the plot.
+    save_path : str, Optional
+        The path to save the plot.
+    """
     # Define the number of columns for the grid
     num_rows = (
         len(figures) + ncols - 1
@@ -83,12 +117,29 @@ def plot_grid(figures, label=None, ncols=3, title=None, save_path=None):
 
 
 def dilate_mask(mask, kernel_size=5, iterations=1):
+    """
+    Dilates a binary mask using a square kernel of a given size and number of iterations.
+
+    Parameters:
+    ----------
+    mask : PIL.Image.Image or np.ndarray
+        The binary mask to dilate.
+    kernel_size : int
+        The size of the square kernel used for dilation.
+    iterations : int
+        The number of iterations to apply dilation.
+
+    Returns:
+    -------
+    PIL.Image.Image or np.ndarray
+        The dilated mask in the same format as the input.
+    """
     is_pil = isinstance(mask, Image.Image)
     mask = np.array(mask, dtype=np.uint8)
     kernel = np.ones((kernel_size, kernel_size), np.uint8)
     dilate_mask = cv2.dilate(mask, kernel, iterations=iterations)
     if is_pil:
-        return Image.fromarray(dilate_mask)
+        return Image.fromarray(dilate_mask).convert("L")
     else:
         return dilate_mask
 

@@ -1,0 +1,17 @@
+[dataset]
+name = "ISIC2019"
+yaml_file = '/workspace/home/data/datasets.yaml'
+
+[confounder_classification]
+model = 'sgl'
+output_for_true = ["yes", "yes."]
+num_batches = 50
+
+
+[confounder_classification.sgl]
+model_path = "lmms-lab/llama3-llava-next-8b"
+chat_template = "llava_llama_3"
+user_input_list = [
+    "This image is from a set of images from skin lesions. We want to identify whether there are confounding factors in the images of this dataset. We identified that colored patches (also called stickers) are confounding factors in this dataset. Is there such a colored patch in this image? Please explain.",
+    "Can you tell me, considering your explanation, if you see a coloful, ellipsoid, contrasting object attached on the skin or not? Answer with one word of the options [yes, no]",
+]

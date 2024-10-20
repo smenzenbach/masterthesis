@@ -1,0 +1,10 @@
+[dataset]
+name = "ISIC2019"
+yaml_file = '/workspace/home/data/datasets.yaml'
+
+[confounder_classification]
+model = 'gpt4'
+output_for_true = ["yes", "yes."]
+
+[confounder_classification.gpt4]
+prompt = "This image is from a set of images from skin lesions. We want to identify whether there are confounding factors in the images of this dataset. We identified that colored patches (also called stickers) are confounding factors in this dataset. Is there such a colored patch in this image? Please reply with 'yes' or 'no'."

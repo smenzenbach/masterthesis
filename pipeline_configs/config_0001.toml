@@ -1,0 +1,39 @@
+[dataset]
+name = "ISIC2019"
+yaml_file = '/workspace/home/data/datasets.yaml'
+
+[confounder_classification]
+model = 'sgl'
+output_for_true = ["yes", "yes."]
+num_batches = 50
+
+
+[confounder_classification.sgl]
+model_path = "liuhaotian/llava-v1.6-vicuna-7b"
+tokenizer_path = "llava-hf/llava-1.5-7b-hf"
+chat_template = "vicuna_v1.1"
+user_input_list = [
+    "The image shows a close-up from a skin lesion. Is there something on the image that does not seem like it is part of the skin? I don't mean the lesion, but something else contrasting. Please explain.",
+    "Can you tell me, considering your explanation, if you see a coloful, ellipsoid, contrasting object attached on the skin or not? Answer with one word of the options [yes, no]",
+]
+
+[segmentation]
+model = 'dito'
+custom_voabulary = [
+    "colorful patch",
+    "colorful sticker",
+    "colorful circle",
+    "colorful cutted circle",
+]
+
+[segmentation.dito]
+confidence_threshold = 0.0007
+
+
+[inpainting]
+model = 'iopaint_lama_sdxl'
+prompt = "part of skin in homogenous skin color"
+
+[inpainting.dilation]
+kernel_size = 5
+iterations = 10

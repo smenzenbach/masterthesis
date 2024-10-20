@@ -243,3 +243,32 @@ def create_evaluation_yaml(yaml_path, metrics):
 
     with open(yaml_path, "w") as yaml_file:
         yaml.dump(data, yaml_file)
+
+
+def count_errors(csv_file):
+    """
+    Count the number of errors in the csv file.
+
+    Parameters
+    ----------
+    csv_file : str
+        The path to the csv file.
+
+    Returns
+    -------
+    int
+        The number of errors in the csv file.
+    """
+
+    with open(csv_file, mode="r") as csv_file:
+        reader = csv.reader(csv_file)
+
+        # Skip header
+        next(reader)
+
+        error_count = 0
+        for row in reader:
+            if "error" in row[2].lower():
+                error_count += 1
+
+        return error_count

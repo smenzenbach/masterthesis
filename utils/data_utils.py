@@ -363,6 +363,7 @@ def merge_csv_files(output_filename, input_filenames, sort=True, delete_merged=T
                     writer.writerow(row)
             if delete_merged:
                 os.remove(filename)
+                print(f"Temporary file {filename} cleaned up.")
         if sort:
             sort_csv_by_column(output_filename, 0, header=True)
 

@@ -1,25 +1,19 @@
-from calendar import c
-from email.mime import image
 import os
-import re
 import sys
-import warnings
-import yaml
 import torch
-import argparse
 from PIL import Image
-from tqdm import tqdm
-import numpy as np
 
 
 # Add the project root directory to sys.path
 project_root = os.path.abspath("..")  # Adjust this path if needed
 sys.path.append(project_root)
+from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
+from transformers import pipeline
 
-from utils import nms_grounded, remove_big_box_grounded, remove_small_box_grounded
+from utils import nms_grounding, remove_big_box_grounding, remove_small_box_grounding
 
 
-def segment_instance_groundedRMBG(
+def segment_instance_groundingRMBG(
     img_dict,
     custom_vocab,
     detection_model,
@@ -28,7 +22,7 @@ def segment_instance_groundedRMBG(
     device=0,
     save_path=None,
 ):
-    image = Image.open(img_dict["image_path"])
+    image = Image.open(img_dict["file_path"])
     text = ""
     for vocab in custom_vocab:
         text += f"a {vocab.lower()} . "
@@ -61,12 +55,14 @@ def segment_instance_groundedRMBG(
     """
 
     # Post-process the results
-    results = nms_grounded(results)
-    results = remove_big_box_grounded(results, image.size, 0.5)
-    results = remove_small_box_grounded(results, image.size, 0.06)
+    results = nms_grounding(results)
+    results = remove_big_box_grounding(results, image.size, 0.5)
+    results = remove_small_box_grounding(results, image.size, 0.06)
 
     # Create a blank mask for the original image
     original_mask = Image.new("L", image.size, 0)
+
+    bounding_box_on_image = image.convert("RGBA")
 
     for box in results[0]["boxes"].cpu().numpy():
         # pre process the image for segmentation
@@ -92,8 +88,32 @@ def segment_instance_groundedRMBG(
         # Combine the temp_mask with the original_mask using the maximum value (logical OR)
         original_mask = Image.composite(temp_mask, original_mask, temp_mask)
 
+        # Draw the bounding box on the image
+        bounding_box_on_image = Image.alpha_composite(
+            bounding_box_on_image,
+            Image.new("RGBA", bounding_box_on_image.size, (255, 255, 255, 0)),
+        )
+
     # Save the mask or display it
     if save_path:
         original_mask.save(save_path)
     else:
-        return original_mask
+        return original_mask, bounding_box_on_image
+
+
+def setup_processor_model_pipeline(device=0):
+    # build grounding dino from huggingface
+    model_id = "IDEA-Research/grounding-dino-tiny"
+    processor = AutoProcessor.from_pretrained(model_id)
+    grounding_model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(
+        f"cuda:{device}"
+    )
+
+    pipe = pipeline(
+        "image-segmentation",
+        model="briaai/RMBG-1.4",
+        trust_remote_code=True,
+        device=f"cuda:{device}",
+    )
+
+    return processor, grounding_model, pipe

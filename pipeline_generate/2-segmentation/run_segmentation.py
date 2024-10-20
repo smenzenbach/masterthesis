@@ -3,6 +3,7 @@ import sys
 import argparse
 import yaml
 import toml
+from tqdm import tqdm
 
 # Add the project root directory to sys.path
 project_root = os.path.abspath("..")  # Adjust this path if needed
@@ -17,7 +18,10 @@ from utils import (
     compare_file_lists,
 )
 from segmentation_dito import segment_instance_dito
-from segmentation_groundedRMBG import segment_instance_groundedRMBG
+from segmentation_groundedRMBG import (
+    segment_instance_groundedRMBG,
+    setup_processor_model_pipeline,
+)
 
 parser = argparse.ArgumentParser(description="Perform segmentation")
 
@@ -52,12 +56,13 @@ if __name__ == "__main__":
 
     # check if existing segmentation should be used
     if "use_existing" in config["segmentation"]:
-        print("Using existing segmentation. Exiting the program.")
+        print(
+            f"Using existing segmentation from {config['segmentation']['use_existing']}. Exiting the program."
+        )
         sys.exit()
 
-
     # get id that is between "_" and "." in the config file name
-    id_tag = int(args.config.split("_")[-1].split(".")[0])
+    id_tag = args.config.split("/")[-1].split("_", 1)[1].split(".")[0]
 
     # Load YAML file into a dictionary
     dataset_name = config["dataset"]["name"]
@@ -78,9 +83,9 @@ if __name__ == "__main__":
         if confounder_pred_id == "gt":
             csv_path = dataset["gt_label_path"]
         else:
-            csv_path = f"/workspace/home/pipeline_outputs/{config["dataset"]["name"]}/{confounder_pred_id}/confounder_pred.csv"
+            csv_path = f"/workspace/home/pipeline_outputs/{config['dataset']['name']}/{confounder_pred_id}/confounder_pred.csv"
     else:
-        csv_path = f"/workspace/home/pipeline_outputs/{config["dataset"]["name"]}/{id_tag}/confounder_pred.csv"
+        csv_path = f"/workspace/home/pipeline_outputs/{config['dataset']['name']}/{id_tag}/confounder_pred.csv"
 
     # get images that should be segmented
     if args.start is None:
@@ -100,7 +105,9 @@ if __name__ == "__main__":
         images = get_images_from_list(image_names, raw_images_path)
 
     # set output dir for segmentation results
-    output_dir = f"/workspace/home/pipeline_outputs/{config["dataset"]["name"]}/{id_tag}/seg"
+    output_dir = (
+        f"/workspace/home/pipeline_outputs/{config['dataset']['name']}/{id_tag}/seg"
+    )
 
     # check if the output directory exists
     if not os.path.exists(output_dir):
@@ -124,47 +131,32 @@ if __name__ == "__main__":
             images = get_images_from_list(missing_files, raw_images_path)
 
     # set custom vocabulary for ov object detection model
-    custom_vocabulary =  config["segmentation"]["custom_voabulary"]
+    custom_vocabulary = config["segmentation"]["custom_vocabulary"]
 
     # retrieve used model
-    model = config["segmentation"]["model"]
+    model_name = config["segmentation"]["model"]
 
     # setup segmentation model
-    if model == "groundedRMBG":
-        from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
-        from transformers import pipeline
-
-        # build grounding dino from huggingface
-        model_id = "IDEA-Research/grounding-dino-tiny"
-        processor = AutoProcessor.from_pretrained(model_id)
-        grounding_model = AutoModelForZeroShotObjectDetection.from_pretrained(
-            model_id
-        ).to(f"cuda:{args.device}")
-
-        pipe = pipeline(
-            "image-segmentation",
-            model="briaai/RMBG-1.4",
-            trust_remote_code=True,
-            device=f"cuda:{args.device}",
-        )
-    elif model == "dito":
+    if model_name == "groundedRMBG":
+        processor, grounding_model, pipe = setup_processor_model_pipeline(args.device)
+    elif model_name == "dito":
         from segmentation_dito import setup_model
         import tensorflow as tf
 
         model, text_embeddings, parser_fn = setup_model(custom_vocabulary, args.device)
-        confidence_threshold = config["segmentation.dito"]["confidence_threshold"]
+        confidence_threshold = config["segmentation"]["dito"]["confidence_threshold"]
     else:
-        raise ValueError(f"Unknown segmentation model: {model}")
+        raise ValueError(f"Unknown segmentation model: {model_name}")
 
     # run segmentation
-    for i, img_dict in enumerate(images):
+    for i, img_dict in enumerate(tqdm(images)):
         # set path were the segmented image should be saved
         save_path = f"{output_dir}/{img_dict['file_name']}"
         # skip already processed images
         if os.path.exists(save_path):
             print(f"\033[31m Already segmented {save_path} \033[0m")
             continue
-        elif model == "groundedRMBG":
+        elif model_name == "groundedRMBG":
             # TODO: implement customizable threshold
             segment_instance_groundedRMBG(
                 img_dict,
@@ -175,9 +167,9 @@ if __name__ == "__main__":
                 args.device,
                 save_path,
             )
-        elif model == "dito":
+        elif model_name == "dito":
             with tf.device(f"/GPU:{args.device}"):
-                output, vis_image = segment_instance_dito(
+                segment_instance_dito(
                     img_dict,
                     custom_vocabulary,
                     confidence_threshold,
