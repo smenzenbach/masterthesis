@@ -55,19 +55,21 @@ def file_name_to_index(files):
     # extract the indices from the file names
     indices = []
     for file in files:
-        index = file.split("_")[1]
-        # remove the file extension
-        index = index.split(".")[0]
-        # remove the leading zeros
-        index = index.lstrip("0")
-        # if the index is empty, it is 0
-        if index == "":
-            index = "0"
-        # ignore copies
-        if "copy" in index.lower():
-            continue
-        indices.append(int(index))
-
+        try:
+            index = file.split("_")[1]
+            # remove the file extension
+            index = index.split(".")[0]
+            # remove the leading zeros
+            index = index.lstrip("0")
+            # if the index is empty, it is 0
+            if index == "":
+                index = "0"
+            # ignore copies
+            if "copy" in index.lower():
+                continue
+            indices.append(int(index))
+        except:
+            print(f"Could not extract index from file {file}")
     return sorted(indices)
 
 

@@ -2,6 +2,7 @@ import os
 import sys
 import yaml
 import toml
+import numpy as np
 
 # Add the project root directory to sys.path
 project_root = os.path.abspath("../..")  # Adjust this path if needed
@@ -35,19 +36,20 @@ parser.add_argument(
     help="Image index to start from",
 )
 
+parser.add_argument(
+    "-e",
+    "--end",
+    default=np.Inf,
+    type=int,
+    help="Image index to start from",
+)
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
 
     # Load the configuration file
     config = toml.load(args.config)
-
-    # check if existing confounder classificaton should be used
-    if "use_existing" in config["confounder_classification"]:
-        print(
-            f"Using existing confounder classification from {config['confounder_classification']['use_existing']}. Exiting the program."
-        )
-        sys.exit()
 
     # get id that is between the first "_" and "." in the config file name
     id_tag = args.config.split("/")[-1].split("_", 1)[1].split(".")[0]
@@ -59,8 +61,30 @@ if __name__ == "__main__":
         datasets = yaml.safe_load(file)
 
     # get dataset
-    dataset_key = "ISIC2019"
-    dataset = datasets[dataset_key]
+    dataset = datasets[dataset_name]
+
+    # check if existing confounder classificaton should be used
+    if "use_existing" in config["confounder_classification"]:
+        confounder_pred_id = config["confounder_classification"]["use_existing"]
+        print(f"Using existing confounder classification from {confounder_pred_id}.")
+        if confounder_pred_id == "gt":
+            source_confounder_classification_path = dataset["gt_label_path"]
+        else:
+            source_confounder_classification_path = f"/workspace/home/pipeline_outputs/{dataset_name}/{confounder_pred_id}/confounder_pred.csv"
+        target_confounder_classification_path = f"/workspace/home/pipeline_outputs/{dataset_name}/{id_tag}/confounder_pred.csv"
+        if not os.path.exists(target_confounder_classification_path):
+            os.makedirs(
+                os.path.dirname(target_confounder_classification_path), exist_ok=True
+            )
+            # create symbolic link to existing segmentation
+            print(
+                f"Creating symbolic link from {source_confounder_classification_path} to {target_confounder_classification_path}."
+            )
+            os.system(
+                f"ln -s {source_confounder_classification_path} {target_confounder_classification_path}"
+            )
+        print("Exiting.")
+        sys.exit()
 
     # get images
     images_path = dataset["raw_path"]
@@ -72,15 +96,15 @@ if __name__ == "__main__":
         image_names = create_file_names_list(images_path)
         # get the image names from the start index (the start index in the name)
         image_names = [
-            name for name in image_names if extract_index(name) >= args.start
+            name
+            for name in image_names
+            if extract_index(name) >= args.start and extract_index(name) <= args.end
         ]
         # get the images from the list of image names
         images = get_images_from_list(image_names, images_path)
 
     # set output dir
-    output_dir = (
-        f"/workspace/home/pipeline_outputs/{config['dataset']['name']}/{id_tag}"
-    )
+    output_dir = f"/workspace/home/pipeline_outputs/{dataset_name}/{id_tag}"
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -135,7 +159,7 @@ if __name__ == "__main__":
         # Generate meta data yaml file
         meta_data = {
             "id": id_tag,
-            "dataset": dataset_key,
+            "dataset": dataset_name,
             "model": model_path,
             "tokenizer": tokenizer_path,
             "chat_template": chat_template,

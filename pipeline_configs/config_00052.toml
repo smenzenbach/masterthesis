@@ -1,0 +1,17 @@
+[dataset]
+name = "ISIC2019"
+yaml_file = '/workspace/home/data/datasets.yaml'
+
+[confounder_classification]
+use_existing = 'gt'
+
+[segmentation]
+use_existing = 'gt'
+
+[inpainting]
+model = 'sdxl'
+prompt = "remove the colorful patch and replace with skin tissue"
+
+[inpainting.dilation]
+kernel_size = 5
+iterations = 5

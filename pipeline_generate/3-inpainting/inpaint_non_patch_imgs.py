@@ -1,5 +1,4 @@
 from diffusers import AutoPipelineForInpainting
-from networkx import center
 import torch
 import os, sys
 import numpy as np
@@ -29,6 +28,14 @@ from utils import (
     get_images_from_list,
     extract_index,
 )
+
+from inpainting_iopaint_lama_sdxl import (
+    inpaint_instance_iopaint_lama_sdxl,
+    setup_diffusion_model,
+    inpaint_batch_iopaint_lama_sdxl,
+)
+from inpainting_iopaint_lama import inpaint_batch_iopaint_lama
+from inpainting_sdxl import inpaint_batch_sdxl
 
 
 def setup_diffusion_model(device):
@@ -74,100 +81,16 @@ def create_random_mask(image_size):
         np.random.randint(image_size[1] // 4, image_size[1] // 3),
     )
     mask = cv2.ellipse(mask, center, axes, angle, 0, 360, (255, 255, 255), -1)
-    mask = Image.fromarray(mask)
+    mask = Image.fromarray(mask).convert("L")
     return mask
-
-
-def inpaint_instance_iopaint_lama_sdxl(
-    images_dict,
-    prompt,
-    pipeline,
-    generator,
-    save_mask_dir=None,
-    save_dir=None,
-    save_path2=None,
-):
-    img_path = images_dict["file_path"]
-    file_name = images_dict["file_name"]
-
-    # check if already inpainted
-    if save_path2 is not None and os.path.exists(save_path2):
-        print(f"Already inpainted {save_path2}")
-        return
-
-    img = Image.open(img_path).convert("RGB")
-
-    mask = create_random_mask(img.size)
-
-    # save mask
-    mask.convert("RGB").save(f"{save_mask_dir}/{file_name}")
-
-    original_img_size = img.size
-
-    # resized_img = image.resize(dilated_mask.shape[:2])
-
-    with tempfile.TemporaryDirectory() as tmpdirname:
-
-        # Define the path for the temporary mask file
-        mask_temp_path = os.path.join(tmpdirname, "mask.jpg")
-        img_temp_path = os.path.join(tmpdirname, file_name)
-        if save_dir:
-            output_dir = save_dir
-        else:
-            output_dir = os.path.join(tmpdirname, "output")
-
-        # Save the mask to the temporary file
-        cv2.imwrite(mask_temp_path, np.array(mask))
-
-        init_model = "lama"  # @param ['lama', 'sd1.5', 'paint_by_example', 'ldm']
-        device = "cuda"  # @param ['cuda', 'cpu', 'mps']
-
-        # Construct the command as a list of arguments
-        command = [
-            "iopaint",
-            "run",
-            f"--model={init_model}",
-            f"--device={device}",
-            f"--image={img_path}",
-            f"--mask={mask_temp_path}",
-            f"--output={output_dir}",
-        ]
-
-        # Execute the command
-        subprocess.run(command)
-
-        # path for second iteration
-        inpainted_path = os.path.join(output_dir, file_name.replace(".jpg", ".png"))
-
-        #!iopaint run --model="diffusers/stable-diffusion-xl-1.0-inpainting-0.1" --device={device} --image={img_url} --mask={mask_path} --output={output_dir_confounder2}
-
-        image = Image.open(inpainted_path)
-        image = image.resize((1024, 1024))
-        mask = mask.resize((1024, 1024))
-        # Run the diffuser
-        result2 = pipeline(
-            prompt=prompt,
-            image=image,
-            mask_image=mask,
-            guidance_scale=8.0,
-            num_inference_steps=25,  # steps between 15 and 30 work well for us
-            strength=0.99,  # make sure to use `strength` below 1.0
-            generator=generator,
-            # padding_mask_crop=32,
-        ).images[0]
-
-        result2 = result2.resize(original_img_size)
-
-        if save_path2 is not None:
-            result2.save(save_path2)
-            print(f"\033[31m Saved {save_path2} \033[0m")
-        else:
-            result1 = Image.open(inpainted_path)
-            return result1, result2
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Inpainting with iopaint")
+
+    parser.add_argument(
+        "--model", type=str, required=True, help="Model to use for inpainting"
+    )
 
     parser.add_argument(
         "-s",
@@ -209,7 +132,7 @@ if __name__ == "__main__":
         images = get_images_from_list(images_list, dataset["raw_path"])
 
     # create output directories
-    id_tag = "random_inpaintings"
+    id_tag = f"random_inpaintings_{args.model}"
     output_dir = (
         f"/workspace/home/pipeline_outputs/ISIC2019/{id_tag}/inpainting_intermediate"
     )
@@ -222,24 +145,63 @@ if __name__ == "__main__":
     # set prompt
     prompt = "part of skin in homogenous skin color"
 
-    # inpaint images
-    for i, img_dict in enumerate(tqdm(images)):
-        file_name = img_dict["file_name"]
+    kernel_size = 0
+    iterations = 0
+    Pipe, generator = setup_diffusion_model(args.device)
 
-        save_path2 = f"{output_dir2}/{file_name}"
+    num_batches = 50
 
-        if save_path2 is not None and os.path.exists(save_path2):
-            print(f"Already inpainted {save_path2}")
-            continue
+    # seperate segmentation masks into batches
+    def chunks(lst, n):
+        """Yield successive n-sized chunks from lst."""
+        for split in np.array_split(lst, n):
+            yield split
 
-        pipe, generator = setup_diffusion_model(args.device)
+    for batch_index, img_dicts in enumerate(
+        tqdm(chunks(images, num_batches), total=num_batches)
+    ):
+        model_name = args.model
 
-        inpaint_instance_iopaint_lama_sdxl(
-            img_dict,
-            prompt,
-            pipe,
-            generator,
-            save_mask_dir=mask_dir,
-            save_dir=output_dir,
-            save_path2=save_path2,
-        )
+        mask_dicts = []
+        for img_dict in img_dicts:
+            img = Image.open(img_dict["file_path"])
+            mask = create_random_mask(img.size)
+            mask_path = os.path.join(mask_dir, img_dict["file_name"])
+            mask.save(mask_path)
+            mask_dicts.append(
+                {"file_path": mask_path, "file_name": img_dict["file_name"]}
+            )
+
+        if model_name == "lama":
+            # remove output_dir
+            inpaint_batch_iopaint_lama(
+                mask_dicts,
+                dataset["raw_path"],
+                kernel_size=kernel_size,
+                iterations=iterations,
+                save_dir=output_dir2,
+            )
+        elif model_name == "sdxl":
+            inpaint_batch_sdxl(
+                mask_dicts,
+                dataset["raw_path"],
+                prompt,
+                Pipe,
+                generator,
+                kernel_size=kernel_size,
+                iterations=iterations,
+                save_dir=output_dir2,
+            )
+        else:
+            inpaint_batch_iopaint_lama_sdxl(
+                mask_dicts,
+                dataset["raw_path"],
+                prompt,
+                Pipe,
+                generator,
+                kernel_size=kernel_size,
+                iterations=iterations,
+                save_dir=output_dir,
+                save_dir2=output_dir2,
+            )
+        print(f"Finished batch {batch_index+1} of {num_batches}")

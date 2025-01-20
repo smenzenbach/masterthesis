@@ -22,6 +22,9 @@ from utils import (
 
 parser = argparse.ArgumentParser(description="Inpainting with iopaint")
 
+parser.add_argument(
+    "--model", type=str, required=True, help="Model to use for inpainting"
+)
 
 parser.add_argument(
     "-nb",
@@ -50,6 +53,7 @@ def run_script(start=None, device=None):
         "python",
         "/workspace/home01/pipeline_generate/3-inpainting/inpaint_non_patch_imgs.py",
     ]
+    script_string.extend(["--model", str(args.model)])
     if start:
         script_string.extend(["-s", str(start)])  # Convert start to string
     if device is not None:
@@ -95,9 +99,8 @@ all_images = create_file_names_list(dataset["raw_path"])
 # get images that are not yet segmented
 images_list = compare_file_lists(segmentation_masks, all_images)[0]
 
-inpainted_folder_path = (
-    f"/workspace/home/pipeline_outputs/ISIC2019/random_inpaintings/inpainting"
-)
+inpainted_folder_path = f"/workspace/home/pipeline_outputs/ISIC2019/random_inpaintings_{args.model}/inpainting"
+os.makedirs(inpainted_folder_path, exist_ok=True)
 
 target_files = create_file_names_list(inpainted_folder_path)
 source_files = images_list

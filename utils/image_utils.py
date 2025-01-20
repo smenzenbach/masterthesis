@@ -19,7 +19,7 @@ def mask_on_image(image, segmentation_map):
     Returns:
     -------
     PIL.Image.Image or np.ndarray
-        The image with the segmentation map overlayed in the same format as the input.
+        The image with the segmentation map overlayed in the same format as the image.
     """
     if isinstance(image, Image.Image):
         pil = True
@@ -116,7 +116,7 @@ def plot_grid(figures, label=None, ncols=3, title=None, save_path=None):
     plt.show()
 
 
-def dilate_mask(mask, kernel_size=5, iterations=1):
+def dilate_mask(mask, kernel_size=5, iterations=1, size=None):
     """
     Dilates a binary mask using a square kernel of a given size and number of iterations.
 

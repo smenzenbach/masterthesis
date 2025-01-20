@@ -1,0 +1,18 @@
+[dataset]
+name = "ISIC2019"
+yaml_file = '/workspace/home/data/datasets.yaml'
+
+[confounder_classification]
+model = 'sgl'
+output_for_true = ["yes", "yes."]
+num_batches = 50
+
+
+[confounder_classification.sgl]
+model_path = "liuhaotian/llava-v1.6-vicuna-7b"
+tokenizer_path = "llava-hf/llava-1.5-7b-hf"
+chat_template = "vicuna_v1.1"
+user_input_list = [
+    "This image is from a set of images from skin lesions. We want to identify whether there are confounding factors in the images of this dataset. We identified that colored patches (also called stickers) are confounding factors in this dataset. Is there such a colored patch in this image? Please explain.",
+    "Can you tell me, considering your explanation, in a short answer with one word of the options [yes, no], if the image contains a colored patch?",
+]

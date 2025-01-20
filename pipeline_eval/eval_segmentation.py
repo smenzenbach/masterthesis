@@ -1,17 +1,17 @@
 import os, sys
 import cv2
-from httpx import head
 import numpy as np
 import warnings
 import csv
 from PIL import Image
+from tqdm import tqdm
 
 # Add the project root directory to sys.path
 project_root = os.path.abspath("..")  # Adjust this path if needed
 sys.path.append(project_root)
 
-from sympy import per
 from utils import dilate_mask
+from utils import create_file_names_list_from_csv
 
 
 def iou_score(mask, mask_gt):
@@ -129,9 +129,9 @@ def pixel_accuracy(mask, mask_gt):
     return pixel_acc
 
 
-def percentage_mask_on_gt(mask, mask_gt):
+def percentage_gt_on_mask(mask, mask_gt):
     """
-    Returns the percentage of pixels of the mask that are part of the ground truth segmentation.
+    Returns the percentage of pixels of the mask that are part of the ground-truth segmentation, i.e., intersection (of mask and gt) over mask.
 
     Parameters
     ----------
@@ -161,6 +161,12 @@ def percentage_mask_on_gt(mask, mask_gt):
         )
         mask = cv2.resize(mask.astype(float), mask_gt.shape[::-1])
 
+    # scale the mask to 0-1
+    if np.max(mask) > 1:
+        mask = mask / 255
+    if np.max(mask_gt) > 1:
+        mask_gt = mask_gt / 255
+
     # Compute the percentage of pixels of the mask that are part of the ground truth segmentation
     if np.sum(mask) == 0:
         return 0
@@ -169,9 +175,9 @@ def percentage_mask_on_gt(mask, mask_gt):
         return percentage
 
 
-def percentage_gt_on_mask(mask, mask_gt):
+def percentage_mask_on_gt(mask, mask_gt):
     """
-    Returns the percentage of pixels of the ground truth segmentation that are part of the mask.
+    Returns the percentage of pixels of the ground-truth segmentation that are part of the mask, i.e., intersection (of mask and gt) over ground truth.
 
     Parameters
     ----------
@@ -201,6 +207,12 @@ def percentage_gt_on_mask(mask, mask_gt):
         )
         mask = cv2.resize(mask.astype(float), mask_gt.shape[::-1])
 
+    # scale the mask to 0-1
+    if np.max(mask) > 1:
+        mask = mask / 255
+    if np.max(mask_gt) > 1:
+        mask_gt = mask_gt / 255
+
     # Compute the percentage of pixels of the ground truth segmentation that are part of the mask
     if np.sum(mask_gt) == 0:
         return 0
@@ -209,12 +221,12 @@ def percentage_gt_on_mask(mask, mask_gt):
         return percentage
 
 
-def percentage_hint_on_mask(mask, mask_hint):
+def percentage_mask_on_hint(mask, mask_hint):
     """
-    Returns the percentage of pixels of the hint mask that are part of the mask.
+    Returns the percentage of pixels of the hint mask that are part of the mask, i.e., intersection (of mask and hint) over hint.
     Same as percentage_gt_on_mask but for hint mask.
     """
-    return percentage_gt_on_mask(mask, mask_hint)
+    return percentage_mask_on_gt(mask, mask_hint)
 
 
 def seg_percentage(gt_segmentation):
@@ -234,6 +246,10 @@ def seg_percentage(gt_segmentation):
     # make sure the segmentation is binary
     if np.unique(gt_segmentation).size > 2:
         raise ValueError("The segmentation masks must be binary.")
+
+    # scale the mask to 0-1
+    if np.max(gt_segmentation) > 1:
+        gt_segmentation = gt_segmentation / 255
 
     return np.sum(gt_segmentation) / gt_segmentation.size
 
@@ -275,13 +291,17 @@ def write_seg_metrics_csv(
         list of dictionaries with the image file name and path of the hint masks. The default is None.
     dilation_function_params : dict, optional
         The parameters to pass to the dilation function. The default is None.
-        {'kernel_size': dilation_kernel_size, 'iterations': dilation_iterations}
+        {'kernel_size': dilation_kernel_size, 'iterations': dilation_iterations, 'mask_width': mask_width, 'mask_height': mask_height}
 
 
     Returns
     -------
     None
     """
+    if os.path.exists(csv_path):
+        already_processed_files = create_file_names_list_from_csv(csv_path)
+    else:
+        already_processed_files = []
     with open(csv_path, mode="w") as csv_file:
         writer = csv.writer(csv_file)
 
@@ -295,10 +315,12 @@ def write_seg_metrics_csv(
             "percentage_gt_on_mask",
             "dilation_kernel_size",
             "dilation_iterations",
+            "dilation_mask_width",
+            "dilation_mask_height",
         ]
 
         if masks_hints is not None:
-            header.append(["has_hint_mask", "percentage_hint_on_mask"])
+            header.extend(["has_hint_mask", "percentage_hint_on_mask"])
             hint_mask = create_hint_mask(
                 np.array(Image.open(masks[0]["file_path"])).shape[:2]
             )
@@ -307,19 +329,36 @@ def write_seg_metrics_csv(
                 for hint_dict in masks_hints
             ]
 
-        writer.writerow(header)
+        if not already_processed_files:
+            writer.writerow(header)
 
-        for mask_dict, mask_gt_dict in zip(masks, gt_masks):
+        for mask_dict, mask_gt_dict in tqdm(zip(masks, gt_masks)):
             image_file_name = mask_dict["file_name"]
 
+            if image_file_name in already_processed_files:
+                continue
+
             mask_url = mask_dict["file_path"]
-            mask = Image.open(mask_url).convert("L")
+            mask = (
+                Image.open(mask_url).convert("L").point(lambda x: 255 if x > 128 else 0)
+            )
+            mask_size = mask.size
 
             mask_gt_url = mask_gt_dict["file_path"]
             mask_gt = Image.open(mask_gt_url).convert("L")
 
+            if dilation_function_params is not None:
+                if "width" in dilation_function_params:
+                    mask_width = dilation_function_params["width"]
+                    mask_height = dilation_function_params["height"]
+                    size = (mask_width, mask_height)
+                    mask = mask.resize(size)
+                kernel_size = dilation_function_params["kernel_size"]
+                iterations = dilation_function_params["iterations"]
+                mask = dilate_mask(mask, kernel_size, iterations).resize(mask_size)
+
             # adapt mask and mask_gt size to same size (size of mask)
-            mask_gt = mask_gt.resize(mask.size)
+            mask_gt = mask_gt.resize(mask_size)
 
             mask_np = np.array(mask)
             mask_gt_np = np.array(mask_gt)
@@ -327,9 +366,6 @@ def write_seg_metrics_csv(
             # assure binary masks
             mask_np = np.where(mask_np > 128, 255, 0)
             mask_gt_np = np.where(mask_gt_np > 128, 255, 0)
-
-            if dilation_function_params is not None:
-                mask_np = dilate_mask(mask_np, **dilation_function_params)
 
             iou = iou_score(mask_np, mask_gt_np)
             dice = dice_coefficient(mask_np, mask_gt_np)
@@ -344,26 +380,37 @@ def write_seg_metrics_csv(
                     hint_mask = np.array(
                         Image.open(hint_mask_path)
                         .convert("L")
-                        .point(lambda x: 255 if x > 128 else 0)
+                        .point(lambda x: 1 if x > 128 else 0)
                     )
                 else:
                     hint_mask = hint_mask
-                hint_on_mask = percentage_hint_on_mask(mask_np, hint_mask)
+                mask_on_hint = percentage_mask_on_hint(mask_np, hint_mask)
 
             metrics_row = [
                 image_file_name,
                 iou,
                 dice,
                 pixel_acc,
-                mask_on_gt,
                 gt_on_mask,
-                dilation_function_params["kernel_size"],
-                dilation_function_params["iterations"],
+                mask_on_gt,
             ]
+
+            if dilation_function_params is not None:
+                metrics_row += [
+                    dilation_function_params["kernel_size"],
+                    dilation_function_params["iterations"],
+                ]
+                if "width" in dilation_function_params:
+                    metrics_row += [
+                        dilation_function_params["width"],
+                        dilation_function_params["height"],
+                    ]
+                else:
+                    metrics_row += [mask_size[0], mask_size[1]]
 
             if masks_hints is not None:
                 metrics_row.append(1 if image_file_name in masks_hint_names else 0)
-                metrics_row.append(hint_on_mask)
+                metrics_row.append(mask_on_hint)
 
             writer.writerow(metrics_row)
 
@@ -398,20 +445,20 @@ def write_avg_metrics_yaml_from_csv(csv_path, yaml_path):
         dilation_iterations = None
 
         has_hint_mask_list = []
-        hint_on_mask_list = []
+        mask_on_hint_list = []
 
         for row in reader:
             iou_list.append(float(row[1]))
             dice_list.append(float(row[2]))
             pixel_acc_list.append(float(row[3]))
-            mask_on_gt_list.append(float(row[4]))
-            gt_on_mask_list.append(float(row[5]))
+            gt_on_mask_list.append(float(row[4]))
+            mask_on_gt_list.append(float(row[5]))
             if dilation_kernel_size is None:
                 dilation_kernel_size = row[6]
                 dilation_iterations = row[7]
             if len(row) > 8:
                 has_hint_mask_list.append(int(row[8]))
-                hint_on_mask_list.append(float(row[9]))
+                mask_on_hint_list.append(float(row[9]))
 
         # Compute the average metrics
         mean_iou = np.mean(iou_list)
@@ -435,54 +482,54 @@ def write_avg_metrics_yaml_from_csv(csv_path, yaml_path):
         median_gt_on_mask = np.median(gt_on_mask_list)
 
         if len(row) > 8:
-            hint_on_mask_array = np.array(hint_on_mask_list)
+            mask_on_hint_array = np.array(mask_on_hint_list)
             num_imgs_with_hint = np.sum(has_hint_mask_list)
-            mean_hint_on_mask = np.mean(hint_on_mask_array)
-            std_hint_on_mask = np.std(hint_on_mask_array)
-            median_hint_on_mask = np.median(hint_on_mask_array)
-            mean_hint_on_mask_over_zero = np.mean(
-                hint_on_mask_array[hint_on_mask_array > 0]
+            mean_mask_on_hint = np.mean(mask_on_hint_array)
+            std_mask_on_hint = np.std(mask_on_hint_array)
+            median_mask_on_hint = np.median(mask_on_hint_array)
+            mean_mask_on_hint_over_zero = np.mean(
+                mask_on_hint_array[mask_on_hint_array > 0]
             )
-            std_hint_on_mask_over_zero = np.std(
-                hint_on_mask_array[hint_on_mask_array > 0]
+            std_mask_on_hint_over_zero = np.std(
+                mask_on_hint_array[mask_on_hint_array > 0]
             )
-            median_hint_on_mask_over_zero = np.median(
-                hint_on_mask_array[hint_on_mask_array > 0]
+            median_mask_on_hint_over_zero = np.median(
+                mask_on_hint_array[mask_on_hint_array > 0]
             )
-            number_hint_filled = np.sum(hint_on_mask_array > 0)
-            number_hint_filled_over_p1 = np.sum(hint_on_mask_array > 0.1)
-            number_hint_filled_over_p25 = np.sum(hint_on_mask_array > 0.25)
-            number_hint_filled_over_p5 = np.sum(hint_on_mask_array > 0.5)
+            number_hint_filled = np.sum(mask_on_hint_array > 0)
+            number_hint_filled_over_p1 = np.sum(mask_on_hint_array > 0.1)
+            number_hint_filled_over_p25 = np.sum(mask_on_hint_array > 0.25)
+            number_hint_filled_over_p5 = np.sum(mask_on_hint_array > 0.5)
 
         with open(yaml_path, "w") as yaml_file:
             yaml_file.write(
-                f"mean_iou: {mean_iou:.3f}\n"
-                f"std_iou: {std_iou:.3f}\n"
-                f"median_iou: {median_iou:.3f}\n"
-                f"mean_dice: {mean_dice:.3f}\n"
-                f"std_dice: {std_dice:.3f}\n"
-                f"median_dice: {median_dice:.3f}\n"
-                f"mean_pixel_accuracy: {mean_pixel_acc:.3f}\n"
-                f"std_pixel_accuracy: {std_pixel_acc:.3f}\n"
-                f"median_pixel_accuracy: {median_pixel_acc:.3f}\n"
-                f"mean_percentage_mask_on_gt: {mean_mask_on_gt:.3f}\n"
-                f"std_percentage_mask_on_gt: {std_mask_on_gt:.3f}\n"
-                f"median_percentage_mask_on_gt: {median_mask_on_gt:.3f}\n"
-                f"mean_percentage_gt_on_mask: {mean_gt_on_mask:.3f}\n"
-                f"std_percentage_gt_on_mask: {std_gt_on_mask:.3f}\n"
-                f"median_percentage_gt_on_mask: {median_gt_on_mask:.3f}\n"
+                f"mean_iou: {mean_iou:.5f}\n"
+                f"std_iou: {std_iou:.5f}\n"
+                f"median_iou: {median_iou:.5f}\n"
+                f"mean_dice: {mean_dice:.5f}\n"
+                f"std_dice: {std_dice:.5f}\n"
+                f"median_dice: {median_dice:.5f}\n"
+                f"mean_pixel_accuracy: {mean_pixel_acc:.5f}\n"
+                f"std_pixel_accuracy: {std_pixel_acc:.5f}\n"
+                f"median_pixel_accuracy: {median_pixel_acc:.5f}\n"
+                f"mean_percentage_gt_on_mask: {mean_gt_on_mask:.5f}\n"
+                f"std_percentage_gt_on_mask: {std_gt_on_mask:.5f}\n"
+                f"median_percentage_gt_on_mask: {median_gt_on_mask:.5f}\n"
+                f"mean_percentage_mask_on_gt: {mean_mask_on_gt:.5f}\n"
+                f"std_percentage_mask_on_gt: {std_mask_on_gt:.5f}\n"
+                f"median_percentage_mask_on_gt: {median_mask_on_gt:.5f}\n"
                 f"dilation_kernel_size: {dilation_kernel_size}\n"
                 f"dilation_iterations: {dilation_iterations}\n"
                 f"n_images: {len(iou_list)}\n"
             )
             if len(row) > 8:
                 yaml_file.write(
-                    f"mean_hint_on_mask: {mean_hint_on_mask:.5f}\n"
-                    f"std_hint_on_mask: {std_hint_on_mask:.5f}\n"
-                    f"median_hint_on_mask: {median_hint_on_mask:.5f}\n"
-                    f"mean_hint_on_mask_over_zero: {mean_hint_on_mask_over_zero:.3f}\n"
-                    f"std_hint_on_mask_over_zero: {std_hint_on_mask_over_zero:.3f}\n"
-                    f"median_hint_on_mask_over_zero: {median_hint_on_mask_over_zero:.3f}\n"
+                    f"mean_mask_on_hint: {mean_mask_on_hint:.5f}\n"
+                    f"std_mask_on_hint: {std_mask_on_hint:.5f}\n"
+                    f"median_mask_on_hint: {median_mask_on_hint:.5f}\n"
+                    f"mean_mask_on_hint_over_zero: {mean_mask_on_hint_over_zero:.5f}\n"
+                    f"std_mask_on_hint_over_zero: {std_mask_on_hint_over_zero:.5f}\n"
+                    f"median_mask_on_hint_over_zero: {median_mask_on_hint_over_zero:.5f}\n"
                     f"n_images_with_hint_mask: {num_imgs_with_hint}\n"
                     f"n_images_hint_filled: {number_hint_filled}\n"
                     f"n_images_hint_filled_over_p1: {number_hint_filled_over_p1}\n"

@@ -137,20 +137,39 @@ def metadata_str2dict(string):
     return file_info_dict
 
 
-def create_file_names_list(folder_path):
-    file_list = os.listdir(folder_path)
+def create_file_names_list(folder_path, ignore_copy=False):
+    file_list = sorted(os.listdir(folder_path))
+    if ignore_copy:
+        file_list = [
+            file_name for file_name in file_list if "copy" not in file_name.lower()
+        ]
     return file_list
 
 
-def create_file_names_list_from_csv(csv_file_path, header=True, filter_func=None):
+def create_file_names_list_from_csv(
+    csv_file_path, header=True, filter_func=None, ignore_copy=False
+):
     with open(csv_file_path, "r") as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
         if header:
-            next(csv_reader)
+            try:
+                next(csv_reader)
+            except StopIteration:
+                print(f"Empty CSV file: {csv_file_path}")
+                return []
         if filter_func is None:
-            file_list = [row[0] for row in csv_reader]
+            file_list = [
+                row[0]
+                for row in csv_reader
+                if ignore_copy and "copy" not in row[0].lower() or not ignore_copy
+            ]
         else:
-            file_list = [row[0] for row in csv_reader if filter_func(row)]
+            file_list = [
+                row[0]
+                for row in csv_reader
+                if filter_func(row)
+                and (ignore_copy and "copy" not in row[0].lower() or not ignore_copy)
+            ]
     return file_list
 
 
@@ -244,10 +263,10 @@ def get_n_confounded_m_non_confounded_images(
             image_name = image["file_name"]
         else:
             image_name = image["meta"]["file_name"]
-        if gt_labels[image_name] == "1" and n_confounded <= n:
+        if gt_labels[image_name] == "1" and n_confounded < n:
             confounded_images.append(image)
             n_confounded += 1
-        elif gt_labels[image_name] == "0" and n_non_confounded <= m:
+        elif gt_labels[image_name] == "0" and n_non_confounded < m:
             non_confounded_images.append(image)
             n_non_confounded += 1
         if n_confounded > n and n_non_confounded > m:

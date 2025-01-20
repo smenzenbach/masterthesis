@@ -53,10 +53,12 @@ args = parser.parse_args()
 start_time = time.time()
 
 
-def run_script(script, start=None, device=None):
+def run_script(script, start=None, end=None, device=None):
     script_string = ["python", script, "--config", args.config]
     if start:
         script_string.extend(["-s", str(start)])  # Convert start to string
+    if end:
+        script_string.extend(["-e", str(end)])
     if device is not None:
         script_string.extend(["-d", str(device)])  # Convert device to string
     subprocess.run(script_string, check=True)
@@ -124,14 +126,15 @@ elif args.script == "segmentation":
 
     if not os.path.exists(segmentation_path):
         target_files = []
+        os.makedirs(segmentation_path)
     else:
         target_files = create_file_names_list(segmentation_path)
     source_files = create_file_names_list_from_csv(csv_path, lambda row: row[1] == "1")
     target_path = segmentation_path
 
-    script_name = (
-        "/workspace/home01/pipeline_generate/2-segmentation/run_segmentation.py"
-    )
+    os.chdir("/workspace/home01/pipeline_generate/2-segmentation")
+
+    script_name = "run_segmentation.py"
 elif args.script == "inpainting":
     inpainted_folder_path = f"/workspace/home/pipeline_outputs/{config['dataset']['name']}/{id_tag}/inpainting"
 
@@ -154,7 +157,9 @@ elif args.script == "inpainting":
 
     target_path = inpainted_folder_path
 
-    script_name = "/workspace/home01/pipeline_generate/3-inpainting/run_inpainting.py"
+    os.chdir("/workspace/home01/pipeline_generate/3-inpainting")
+
+    script_name = "run_inpainting.py"
 
 
 blocks = get_blocks(target_files, source_files, args.num_blocks)
@@ -167,10 +172,10 @@ device = args.devices[0]
 for i, block in enumerate(blocks):
     if i % num_processes_per_device == 0:
         device = args.devices[(i // num_processes_per_device) - 1]
-    print(
-        f"Running block {block[0]} to {block[1]} ({block[2]} images) on device {device}"
+    print(f"block {i}: {block[0]} to {block[1]} ({block[2]} images) on device {device}")
+    p = multiprocessing.Process(
+        target=run_script, args=(script_name, block[0], block[1], device)
     )
-    p = multiprocessing.Process(target=run_script, args=(script_name, block[0], device))
     processes.append(p)
     p.start()
 
@@ -188,7 +193,7 @@ for p in processes:
 # Ensure the status thread also completes once all processes are done
 status_thread.join()
 
-print("All scripts have finished.")
+print(f"All {args.script} scripts have finished.")
 
 
 # python multiprocessing_script.py --config [config_file_path] --scipt [pipline step] --num_blocks 9 --devices 0 1 2 3

@@ -4,10 +4,12 @@ import argparse
 import yaml
 import toml
 from tqdm import tqdm
+import numpy as np
 
 # Add the project root directory to sys.path
-project_root = os.path.abspath("..")  # Adjust this path if needed
-sys.path.append(project_root)
+project_root = os.path.abspath("../..")  # Adjust this path if needed
+if project_root not in sys.path:
+    sys.path.append(project_root)
 
 from utils import (
     get_images_from_csv,
@@ -18,8 +20,8 @@ from utils import (
     compare_file_lists,
 )
 from segmentation_dito import segment_instance_dito
-from segmentation_groundedRMBG import (
-    segment_instance_groundedRMBG,
+from segmentation_groundingRMBG import (
+    segment_instance_groundingRMBG,
     setup_processor_model_pipeline,
 )
 
@@ -41,6 +43,14 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "-e",
+    "--end",
+    default=np.Inf,
+    type=int,
+    help="Image index to start from",
+)
+
+parser.add_argument(
     "-d",
     "--device",
     default=0,
@@ -54,13 +64,6 @@ if __name__ == "__main__":
     # Load the configuration file
     config = toml.load(args.config)
 
-    # check if existing segmentation should be used
-    if "use_existing" in config["segmentation"]:
-        print(
-            f"Using existing segmentation from {config['segmentation']['use_existing']}. Exiting the program."
-        )
-        sys.exit()
-
     # get id that is between "_" and "." in the config file name
     id_tag = args.config.split("/")[-1].split("_", 1)[1].split(".")[0]
 
@@ -73,7 +76,29 @@ if __name__ == "__main__":
     # get dataset
     dataset = datasets[dataset_name]
 
-    # get images
+    # check if existing segmentation should be used
+    if "use_existing" in config["segmentation"]:
+        segmentation_id = config["segmentation"]["use_existing"]
+        print(f"Using existing segmentation from {segmentation_id}.")
+        if segmentation_id == "gt":
+            source_segmentation_path = dataset["gt_seg_path"]
+        else:
+            source_segmentation_path = (
+                f"/workspace/home/pipeline_outputs/{dataset_name}/{segmentation_id}/seg"
+            )
+        target_segmentation_path = (
+            f"/workspace/home/pipeline_outputs/{dataset_name}/{id_tag}/seg"
+        )
+        if not os.path.exists(target_segmentation_path):
+            # create symbolic link to existing segmentation
+            print(
+                f"Creating symbolic link from {source_segmentation_path} to {target_segmentation_path}."
+            )
+            os.system(f"ln -s {source_segmentation_path} {target_segmentation_path}")
+        print("Exiting segmentation.")
+        sys.exit()
+
+    # get images that should be segmented
     raw_images_path = dataset["raw_path"]
 
     # get csv path with confounder classification results
@@ -83,35 +108,25 @@ if __name__ == "__main__":
         if confounder_pred_id == "gt":
             csv_path = dataset["gt_label_path"]
         else:
-            csv_path = f"/workspace/home/pipeline_outputs/{config['dataset']['name']}/{confounder_pred_id}/confounder_pred.csv"
+            csv_path = f"/workspace/home/pipeline_outputs/{dataset_name}/{confounder_pred_id}/confounder_pred.csv"
     else:
-        csv_path = f"/workspace/home/pipeline_outputs/{config['dataset']['name']}/{id_tag}/confounder_pred.csv"
-
-    # get images that should be segmented
-    if args.start is None:
-        images = get_images_from_csv(
-            csv_path, raw_images_path, filter_func=lambda row: row[1] == "1"
-        )
-    else:
-        # get list of image names from the directory
-        image_names = create_file_names_list_from_csv(
-            csv_path, filter_func=lambda row: row[1] == "1"
-        )
-        # get the image names from the start index (the start index in the name)
-        image_names = [
-            name for name in image_names if extract_index(name) >= args.start
-        ]
-        # get the images from the list of image names
-        images = get_images_from_list(image_names, raw_images_path)
+        csv_path = f"/workspace/home/pipeline_outputs/{dataset_name}/{id_tag}/confounder_pred.csv"
 
     # set output dir for segmentation results
-    output_dir = (
-        f"/workspace/home/pipeline_outputs/{config['dataset']['name']}/{id_tag}/seg"
-    )
+    output_dir = f"/workspace/home/pipeline_outputs/{dataset_name}/{id_tag}/seg"
 
     # check if the output directory exists
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+        if args.start is None:
+            images = get_images_from_csv(
+                csv_path, raw_images_path, filter_func=lambda row: row[1] == "1"
+            )
+        else:
+            # get list of image names from the directory
+            image_names = create_file_names_list_from_csv(
+                csv_path, filter_func=lambda row: row[1] == "1"
+            )
     else:
         print(
             "Output directory already exists. Check if there are still unsegmented images."
@@ -128,7 +143,21 @@ if __name__ == "__main__":
         else:
             print(f"Found {len(missing_files)} images to process.")
             # only process the missing files
-            images = get_images_from_list(missing_files, raw_images_path)
+            if args.start is None:
+                images = get_images_from_list(missing_files, raw_images_path)
+            else:
+                image_names = missing_files
+
+    # get images that should be segmented
+    if args.start is not None:
+        # get the image names from the start index (the start index in the name)
+        image_names = [
+            name
+            for name in image_names
+            if extract_index(name) >= args.start and extract_index(name) <= args.end
+        ]
+        # get the images from the list of image names
+        images = get_images_from_list(image_names, raw_images_path)
 
     # set custom vocabulary for ov object detection model
     custom_vocabulary = config["segmentation"]["custom_vocabulary"]
@@ -137,7 +166,7 @@ if __name__ == "__main__":
     model_name = config["segmentation"]["model"]
 
     # setup segmentation model
-    if model_name == "groundedRMBG":
+    if model_name == "groundingRMBG":
         processor, grounding_model, pipe = setup_processor_model_pipeline(args.device)
     elif model_name == "dito":
         from segmentation_dito import setup_model
@@ -156,9 +185,9 @@ if __name__ == "__main__":
         if os.path.exists(save_path):
             print(f"\033[31m Already segmented {save_path} \033[0m")
             continue
-        elif model_name == "groundedRMBG":
+        elif model_name == "groundingRMBG":
             # TODO: implement customizable threshold
-            segment_instance_groundedRMBG(
+            segment_instance_groundingRMBG(
                 img_dict,
                 custom_vocabulary,
                 grounding_model,

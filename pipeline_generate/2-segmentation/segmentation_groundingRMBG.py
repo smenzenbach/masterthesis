@@ -94,6 +94,11 @@ def segment_instance_groundingRMBG(
             Image.new("RGBA", bounding_box_on_image.size, (255, 255, 255, 0)),
         )
 
+    assert (
+        original_mask.size[0] == image.size[0]
+        and original_mask.size[1] == image.size[1]
+    )
+
     # Save the mask or display it
     if save_path:
         original_mask.save(save_path)

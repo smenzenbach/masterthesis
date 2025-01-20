@@ -7,7 +7,7 @@ use_existing = 'gt'
 
 [segmentation]
 model = 'groundedRMBG'
-custom_voabulary = [
+custom_vocabulary = [
     "colorful patch",
     "colorful sticker",
     "colorful circle",

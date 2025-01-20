@@ -7,7 +7,8 @@ from dataclasses import dataclass
 
 # Add the project root directory to sys.path
 project_root = os.path.abspath("..")  # Adjust this path if needed
-sys.path.append(project_root)
+if project_root not in sys.path:
+    sys.path.append(project_root)
 
 from utils import load_images, get_images_from_directory
 
@@ -102,7 +103,75 @@ def build_gt_csv_from_seg_gt(csv_path, images_dir_path, seg_dir_path):
             writer.writerow([image_file_name, label])
 
 
-def evaluation_metrics(gt_csv, predictions_csv):
+# dataclass
+@dataclass
+class EvaluationMetrics:
+    accuracy: float
+    recall: float
+    precision: float
+    f1: float
+    false_positive: int = 0
+    false_negative: int = 0
+    true_positive: int = 0
+    true_negative: int = 0
+    num_imgs: int = 0
+
+
+def evaluation_metrics(gt_label, predicted_label):
+    """
+    Compare the ground truth values with the predictions and return the evaluation metrics: accuracy, recall, precision, and f1.
+
+    Parameters
+    ----------
+    gt_label : list
+        A list of ground truth labels.
+    predicted_label : list
+        A list of predicted labels.
+
+    Returns
+    -------
+    tuple
+        A tuple of the evaluation metrics: accuracy, recall, precision, and f1.
+    """
+
+    true_positive = 0
+    false_positive = 0
+    true_negative = 0
+    false_negative = 0
+
+    for gt, pred in zip(gt_label, predicted_label):
+        if gt == 1 and pred == 1:
+            true_positive += 1
+        elif gt == 0 and pred == 1:
+            false_positive += 1
+        elif gt == 0 and pred == 0:
+            true_negative += 1
+        elif gt == 1 and pred == 0:
+            false_negative += 1
+
+    accuracy = (true_positive + true_negative) / (
+        true_positive + true_negative + false_positive + false_negative
+    )
+    recall = true_positive / (true_positive + false_negative)
+    precision = true_positive / (true_positive + false_positive)
+    f1 = 2 * (precision * recall) / (precision + recall)
+
+    num_imgs = len(gt_label)
+
+    return EvaluationMetrics(
+        accuracy,
+        recall,
+        precision,
+        f1,
+        false_positive,
+        false_negative,
+        true_positive,
+        true_negative,
+        num_imgs,
+    )
+
+
+def evaluation_metrics_csv(gt_csv, predictions_csv):
     """
     Compare the ground truth values with the predictions and return the evaluation metrics: accuracy, recall, precision, and f1.
     It is assumed that the csv files have a header.
@@ -139,19 +208,6 @@ def evaluation_metrics(gt_csv, predictions_csv):
     --------
     If there are images in the ground truth csv that are not in the predictions csv, a warning will be raised.
     """
-
-    # dataclass
-    @dataclass
-    class EvaluationMetrics:
-        accuracy: float
-        recall: float
-        precision: float
-        f1: float
-        false_positive: int = 0
-        false_negative: int = 0
-        true_positive: int = 0
-        true_negative: int = 0
-        num_imgs: int = 0
 
     with open(gt_csv, mode="r") as gt_file, open(
         predictions_csv, mode="r"
@@ -213,7 +269,7 @@ def evaluation_metrics(gt_csv, predictions_csv):
         )
 
 
-def create_evaluation_yaml(yaml_path, metrics):
+def create_evaluation_yaml(yaml_path, metrics, num_error=None):
     """
     Create a yaml file with the evaluation metrics.
 
@@ -223,6 +279,8 @@ def create_evaluation_yaml(yaml_path, metrics):
         The path to save the yaml file.
     metrics : EvaluationMetrics
         A dataclass with the evaluation metrics.
+    num_error : int, optional
+        The number of errors in the predictions csv file. Default is None.
 
     Returns
     -------
@@ -240,6 +298,9 @@ def create_evaluation_yaml(yaml_path, metrics):
         "true_negative": metrics.true_negative,
         "num_imgs": metrics.num_imgs,
     }
+
+    if num_error is not None:
+        data["num_error"] = num_error
 
     with open(yaml_path, "w") as yaml_file:
         yaml.dump(data, yaml_file)

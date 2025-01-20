@@ -10,7 +10,7 @@ num_batches = 50
 
 [confounder_classification.sgl]
 model_path = "lmms-lab/llama3-llava-next-8b"
-chat_template = "llava_llama_3"
+chat_template = "chatml-llava" #"llava_llama_3"
 user_input_list = [
     "The image shows a close-up from a skin lesion. Is there something on the image that does not seem like it is part of the skin? I don't mean the lesion, but something else contrasting. Please explain.",
     "Can you tell me, considering your explanation, if you see a coloful, ellipsoid, contrasting object attached on the skin or not? Answer with one word of the options [yes, no]",

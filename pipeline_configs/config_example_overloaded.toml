@@ -39,6 +39,7 @@ confidence_threshold = 0.0007
 [inpainting]
 model = 'iopaint_lama_sdxl'
 prompt = "part of skin in homogenous skin color"
+num_batches = 50
 
 [inpainting.dilation]
 kernel_size = 5
