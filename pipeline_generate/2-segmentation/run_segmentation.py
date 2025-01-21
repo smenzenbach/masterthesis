@@ -5,11 +5,7 @@ import yaml
 import toml
 from tqdm import tqdm
 import numpy as np
-
-# Add the project root directory to sys.path
-project_root = os.path.abspath("../..")  # Adjust this path if needed
-if project_root not in sys.path:
-    sys.path.append(project_root)
+import tensorflow as tf
 
 from utils import (
     get_images_from_csv,
@@ -24,6 +20,12 @@ from segmentation_groundingRMBG import (
     segment_instance_groundingRMBG,
     setup_processor_model_pipeline,
 )
+from segmentation_groundingRMBG2 import (
+    segment_instance_groundingRMBG2,
+    setup_processor_model_pipeline2,
+)
+from segmentation_dito import setup_model
+
 
 parser = argparse.ArgumentParser(description="Perform segmentation")
 
@@ -168,10 +170,9 @@ if __name__ == "__main__":
     # setup segmentation model
     if model_name == "groundingRMBG":
         processor, grounding_model, pipe = setup_processor_model_pipeline(args.device)
+    elif model_name == "groundingRMBG2":
+        processor, grounding_model, segmentation_model = setup_processor_model_pipeline2(args.device)
     elif model_name == "dito":
-        from segmentation_dito import setup_model
-        import tensorflow as tf
-
         model, text_embeddings, parser_fn = setup_model(custom_vocabulary, args.device)
         confidence_threshold = config["segmentation"]["dito"]["confidence_threshold"]
     else:
@@ -195,6 +196,17 @@ if __name__ == "__main__":
                 pipe,
                 args.device,
                 save_path,
+            )
+        elif model_name == "groundingRMBG2":
+            # TODO: implement customizable threshold
+            segment_instance_groundingRMBG2(
+                img_dict,
+                custom_vocab=custom_vocabulary,
+                detection_model=grounding_model,
+                processor=processor,
+                segmentation_model=segmentation_model,
+                device=args.device,
+                save_path=save_path,
             )
         elif model_name == "dito":
             with tf.device(f"/GPU:{args.device}"):

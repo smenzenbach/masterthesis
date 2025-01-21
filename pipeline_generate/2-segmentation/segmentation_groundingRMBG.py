@@ -1,12 +1,8 @@
-import os
-import sys
 import torch
 from PIL import Image
 
 
 # Add the project root directory to sys.path
-project_root = os.path.abspath("..")  # Adjust this path if needed
-sys.path.append(project_root)
 from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 from transformers import pipeline
 

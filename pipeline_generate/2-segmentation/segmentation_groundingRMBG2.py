@@ -1,19 +1,13 @@
-import os
-import sys
 import torch
 from PIL import Image
 from torchvision import transforms
 
 
-# Add the project root directory to sys.path
-project_root = os.path.abspath("..")  # Adjust this path if needed
-sys.path.append(project_root)
 from transformers import (
     AutoProcessor,
     AutoModelForZeroShotObjectDetection,
     AutoModelForImageSegmentation,
 )
-from transformers import pipeline
 
 from utils import nms_grounding, remove_big_box_grounding, remove_small_box_grounding
 
@@ -115,11 +109,13 @@ def setup_processor_model_pipeline2(device=0):
     grounding_model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(
         f"cuda:{device}"
     )
+    print("load grounding model")
 
     # Load the segmentation model
     segmentation_model = AutoModelForImageSegmentation.from_pretrained(
         "briaai/RMBG-2.0", trust_remote_code=True
     ).to(f"cuda:{device}")
     segmentation_model.eval()
+    print("load segmentation model")
 
     return processor, grounding_model, segmentation_model
