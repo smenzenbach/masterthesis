@@ -103,15 +103,16 @@ def segment_instance_groundingRMBG2(
 
 
 def setup_processor_model_pipeline2(device=0):
-    # Load the detection model and processor
+    # Load the detection model and processor from Hugging Face
     model_id = "IDEA-Research/grounding-dino-tiny"
     processor = AutoProcessor.from_pretrained(model_id)
+    print("loaded processor")
     grounding_model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(
         f"cuda:{device}"
     )
-    print("load grounding model")
+    print("loaded grounding model")
 
-    # Load the segmentation model
+    # Load the segmentation model from Hugging Face
     segmentation_model = AutoModelForImageSegmentation.from_pretrained(
         "briaai/RMBG-2.0", trust_remote_code=True
     ).to(f"cuda:{device}")
