@@ -1,0 +1,15 @@
+[dataset]
+name = "Pascal_VOC07"
+yaml_file = '/workspace/home/data/datasets.yaml'
+
+[segmentation]
+use_existing = "pascal_test"
+
+[inpainting]
+model = 'sdxl'
+prompt = ""
+num_batches = 5
+
+[inpainting.dilation]
+kernel_size = 5
+iterations = 4

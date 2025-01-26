@@ -1,0 +1,15 @@
+[dataset]
+name = "Pascal_VOC07"
+yaml_file = '/workspace/home/data/datasets.yaml'
+
+
+[segmentation]
+
+
+[inpainting]
+model = 'iopaint_lama_sdxl'
+prompt = ""
+
+[inpainting.dilation]
+kernel_size = 5
+iterations = 4
