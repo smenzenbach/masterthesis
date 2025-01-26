@@ -137,6 +137,12 @@ def metadata_str2dict(string):
     return file_info_dict
 
 
+def file_name_from_file_path(filepath):
+    """Extracts the file name from a given filepath"""
+    # Split the path into components and return the last component
+    return os.path.basename(filepath)
+
+
 def create_file_names_list(folder_path, ignore_copy=False):
     file_list = sorted(os.listdir(folder_path))
     if ignore_copy:
@@ -174,27 +180,29 @@ def create_file_names_list_from_csv(
 
 
 def get_images_from_list(
-    image_name_list, dir_path, sub_dir=False, with_img=False, ignore_copy=True
+    file_name_list, dir_path, sub_dir=False, as_dict=False, ignore_copy=True
 ):
+    """Returns per default a list of file paths of the files in the given list. If as_dict is True, returns a list of dictionaries with the keys 'file_path', 'file_name' and 'imgage'."""
+
     def process_image(image_name, image_path):
         try:
-            meta_dict = {"file_path": image_path, "file_name": image_name}
-            if not with_img:
-                return meta_dict
-            img_dict = {}
-            image_path = os.path.join(image_name, image_path)
-            image = Image.open(image_path)
-            img_dict["image"] = image
-            meta_dict = {"file_path": image_path, "file_name": image_name}
-            img_dict["meta"] = meta_dict
-            return img_dict
+            if not as_dict:
+                return image_path
+            else:
+                image = Image.open(image_path)
+                img_dict = {
+                    "file_path": image_path,
+                    "file_name": image_name,
+                    "image": image,
+                }
+                return img_dict
         except Exception as e:
             print(f"Error loading {image_name}: {e}")
 
     images = []
     # Traverse the folder and subfolders (if enabled)
     for root, _, files in os.walk(dir_path):
-        if image_name_list is None:
+        if file_name_list is None:
             files = sorted(files)
             for file_name in files:
                 if ignore_copy and "copy" in file_name.lower():
@@ -202,8 +210,8 @@ def get_images_from_list(
                 file_path = os.path.join(root, file_name)
                 images.append(process_image(file_name, file_path))
         else:
-            image_name_list = sorted(image_name_list)
-            for file_name in image_name_list:
+            file_name_list = sorted(file_name_list)
+            for file_name in file_name_list:
                 if file_name in files:
                     if ignore_copy and "copy" in file_name.lower():
                         continue
@@ -217,28 +225,26 @@ def get_images_from_list(
     return images
 
 
-def get_images_from_directory(
-    dir_path, sub_dir=False, with_img=False, ignore_copy=True
-):
-    return get_images_from_list(None, dir_path, sub_dir, with_img, ignore_copy)
+def get_images_from_directory(dir_path, sub_dir=False, as_dict=False, ignore_copy=True):
+    return get_images_from_list(None, dir_path, sub_dir, as_dict, ignore_copy)
 
 
 def get_images_from_csv(
     csv_file_path,
     dir_path,
     sub_dir=False,
-    with_img=False,
+    as_dict=False,
     ignore_copy=True,
     header=True,
     filter_func=None,
 ):
     image_names = create_file_names_list_from_csv(csv_file_path, header, filter_func)
     print(f"Found {len(image_names)} images in {csv_file_path}")
-    return get_images_from_list(image_names, dir_path, sub_dir, with_img, ignore_copy)
+    return get_images_from_list(image_names, dir_path, sub_dir, as_dict, ignore_copy)
 
 
 def get_n_confounded_m_non_confounded_images(
-    dir_path, gt_label_csv_path, n, m, sub_dir=False, with_img=False, ignore_copy=True
+    dir_path, gt_label_csv_path, n, m, sub_dir=False, as_dict=False, ignore_copy=True
 ):
     # Load the ground truth labels from the CSV file
     with open(gt_label_csv_path, "r") as file:
@@ -251,7 +257,7 @@ def get_n_confounded_m_non_confounded_images(
     image_names = list(gt_labels.keys())
 
     # Get the images from the directory
-    images = get_images_from_list(image_names, dir_path, sub_dir, with_img, ignore_copy)
+    images = get_images_from_list(image_names, dir_path, sub_dir, as_dict, ignore_copy)
 
     # Separate the images into confounded and non-confounded groups
     confounded_images = []
@@ -259,10 +265,10 @@ def get_n_confounded_m_non_confounded_images(
     n_confounded = 0
     n_non_confounded = 0
     for image in images:
-        if not with_img:
-            image_name = image["file_name"]
+        if not as_dict:
+            image_name = file_name_from_file_path(image)
         else:
-            image_name = image["meta"]["file_name"]
+            image_name = image["file_name"]
         if gt_labels[image_name] == "1" and n_confounded < n:
             confounded_images.append(image)
             n_confounded += 1

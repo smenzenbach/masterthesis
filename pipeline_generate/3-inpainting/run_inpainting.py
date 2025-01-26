@@ -18,6 +18,7 @@ from utils import (
     compare_file_lists,
     get_images_from_list,
     extract_index,
+    file_name_from_file_path,
 )
 from utils import mask_on_image, dilate_mask, plot_grid
 from inpainting_iopaint_lama_sdxl import (
@@ -118,6 +119,10 @@ if not os.path.exists(output_dir2):
         segmentation_masks = get_images_from_directory(
             dir_path=segmentation_masks_path, ignore_copy=True
         )
+        images_paths = get_images_from_directory(
+            dir_path=dataset["raw_path"], sub_dir=True
+        )
+
     else:
         mask_names = create_file_names_list(segmentation_masks_path, ignore_copy=True)
 
@@ -141,6 +146,9 @@ else:
             segmentation_masks = get_images_from_list(
                 missing_files, segmentation_masks_path
             )
+            images_paths = get_images_from_list(
+                missing_files, dataset["raw_path"], sub_dir=True
+            )
         else:
             mask_names = missing_files
 
@@ -154,6 +162,7 @@ if args.start is not None:
     segmentation_masks = get_images_from_list(
         mask_names, segmentation_masks_path, ignore_copy=True
     )
+    images_paths = get_images_from_list(mask_names, dataset["raw_path"], sub_dir=True)
 
 
 prompt = config["inpainting"]["prompt"]
@@ -187,8 +196,11 @@ def chunks(lst, n):
         yield split
 
 
-for batch_index, mask_dicts in enumerate(
-    tqdm(chunks(segmentation_masks, num_batches), total=num_batches)
+for batch_index, (mask_path_list, image_path_list) in enumerate(
+    tqdm(
+        zip(chunks(segmentation_masks, num_batches), chunks(images_paths, num_batches)),
+        total=num_batches,
+    )
 ):
     if "model" in config["inpainting"]:
         model_name = config["inpainting"]["model"]
@@ -197,8 +209,8 @@ for batch_index, mask_dicts in enumerate(
     if model_name == "lama":
         # remove output_dir
         inpaint_batch_iopaint_lama(
-            mask_dicts,
-            dataset["raw_path"],
+            mask_path_list,
+            image_path_list,
             kernel_size=kernel_size,
             iterations=iterations,
             size=size,
@@ -206,8 +218,8 @@ for batch_index, mask_dicts in enumerate(
         )
     elif model_name == "sdxl":
         inpaint_batch_sdxl(
-            mask_dicts,
-            dataset["raw_path"],
+            mask_path_list,
+            image_path_list,
             prompt,
             Pipe,
             generator,
@@ -218,8 +230,8 @@ for batch_index, mask_dicts in enumerate(
         )
     else:
         inpaint_batch_iopaint_lama_sdxl(
-            mask_dicts,
-            dataset["raw_path"],
+            mask_path_list,
+            image_path_list,
             prompt,
             Pipe,
             generator,
