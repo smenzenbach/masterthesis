@@ -143,13 +143,18 @@ def file_name_from_file_path(filepath):
     return os.path.basename(filepath)
 
 
-def create_file_names_list(folder_path, ignore_copy=False):
-    file_list = sorted(os.listdir(folder_path))
+def create_file_names_list(dir_path, sub_dir=False, ignore_copy=False):
+    file_list = []
+    for _, _, files in os.walk(dir_path):
+        file_list.extend(files)
+        if not sub_dir:
+            # Break after processing the top-level folder if not searching subfolders
+            break
     if ignore_copy:
         file_list = [
             file_name for file_name in file_list if "copy" not in file_name.lower()
         ]
-    return file_list
+    return sorted(file_list)
 
 
 def create_file_names_list_from_csv(
@@ -329,11 +334,12 @@ def sort_csv_by_column(csv_path, column_index, header=True):
         rows = list(csv.reader(file))
 
     # Sort the rows based on the values in the specified column
-    sorted_rows = sorted(rows[1:], key=lambda row: row[column_index])
-
-    # Add the header row back to the sorted list if it was present
     if header:
+        sorted_rows = sorted(rows[1:], key=lambda row: row[column_index])
+        # Add the header row back to the sorted list if it was present
         sorted_rows.insert(0, rows[0])
+    else:
+        sorted_rows = sorted(rows, key=lambda row: row[column_index])
 
     # Write the sorted rows back to the original CSV file
     with open(csv_path, "w", newline="") as file:
@@ -396,3 +402,31 @@ def merge_csv_files(output_filename, input_filenames, sort=True, delete_merged=T
 def read_h5(h5_file_path):
     with h5py.File(h5_file_path, "r") as f:
         return {key: f[key][()] for key in f.keys()}
+
+
+def create_pascal_gt_csv(confounded_dir, raw_dir, csv_path):
+    """Create a CSV file with ground truth labels for the Pascal VOC dataset. The first column is the image filename, and the second column is the ground truth label (0 or 1). The label is 1 for confounded images and 0 for non-confounded images."""
+    confounded_images = create_file_names_list(confounded_dir)
+    raw_images = create_file_names_list(raw_dir, sub_dir=True)
+    with open(csv_path, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["image_file_name", "label"])
+        for image in raw_images:
+            label = 1 if image in confounded_images else 0
+            writer.writerow([image, label])
+    sort_csv_by_column(csv_path, 0, header=True)
+    print(f"Ground truth CSV file created at {csv_path}.")
+
+
+def create_pascal_horses_gt_csv(confounded_dir, not_cofounded_dir, csv_path):
+    confounded_images = create_file_names_list(confounded_dir)
+    not_cofounded_dir = create_file_names_list(not_cofounded_dir)
+    raw_images = confounded_images + not_cofounded_dir
+    with open(csv_path, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["image_file_name", "label"])
+        for image in raw_images:
+            label = 1 if image in confounded_images else 0
+            writer.writerow([image, label])
+    sort_csv_by_column(csv_path, 0, header=True)
+    print(f"Ground truth CSV file created at {csv_path}.")

@@ -13,6 +13,8 @@ from .data_utils import (
     extract_index,
     merge_csv_files,
     read_h5,
+    create_pascal_gt_csv,
+    create_pascal_horses_gt_csv,
 )
 
 from .confounder_classification_utils import create_label_from_output
