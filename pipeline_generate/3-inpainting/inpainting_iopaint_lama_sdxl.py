@@ -11,8 +11,8 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 from utils import file_name_from_file_path, inpainting_preprocessing
-from .inpainting_sdxl import run_sdxl
-from .inpainting_iopaint_lama import run_lama
+from inpainting_sdxl import run_sdxl
+from inpainting_iopaint_lama import run_lama
 
 
 def inpaint_instance_iopaint_lama_sdxl(
@@ -27,7 +27,7 @@ def inpaint_instance_iopaint_lama_sdxl(
     save_dir_intermediate=None,
     save_dir_final=None,
 ):
-    file_name = file_name_from_file_path(mask_path)
+    image_fname = file_name_from_file_path(image_path)
 
     # check if already inpainted
     if save_dir_final is not None and os.path.exists(save_dir_final):
@@ -43,7 +43,7 @@ def inpaint_instance_iopaint_lama_sdxl(
 
         # Define the path for the temporary mask file to save result for second iteration
         mask_temp_path = os.path.join(tmpdirname, "mask.jpg")
-        img_temp_path = os.path.join(tmpdirname, file_name)
+        img_temp_path = os.path.join(tmpdirname, "image.jpg")
         if save_dir_intermediate:
             output_dir = save_dir_intermediate
         else:
@@ -58,7 +58,9 @@ def inpaint_instance_iopaint_lama_sdxl(
         run_lama(img_temp_path, mask_temp_path, output_dir)
 
         # path of lama inpainted image
-        result_lama_path = os.path.join(output_dir, file_name.replace(".jpg", ".png"))
+        result_lama_path = os.path.join(output_dir, "image.png")
+
+        # print files in output_dir
 
         #!iopaint run --model="diffusers/stable-diffusion-xl-1.0-inpainting-0.1" --device={device} --image={img_url} --mask={mask_path} --output={output_dir_confounder2}
 
@@ -75,7 +77,7 @@ def inpaint_instance_iopaint_lama_sdxl(
 
         # save or return final results
         if save_dir_final is not None:
-            save_path_final = os.path.join(save_dir_final, file_name)
+            save_path_final = os.path.join(save_dir_final, image_fname)
             result_sdxl.save(save_path_final)
             print(f"\033[31m Saved {save_path_final} \033[0m")
         else:
@@ -104,7 +106,9 @@ def inpaint_batch_iopaint_lama_sdxl(
         os.makedirs(imgs_temp_path, exist_ok=True)
 
         # Save the dilated mask and images to the temporary file
-        for mask_path, image_path in tqdm(zip(mask_path_list, image_path_list)):
+        for mask_path, image_path in tqdm(
+            zip(mask_path_list, image_path_list)
+        ):  # error mask and image not fitting
             file_name = file_name_from_file_path(mask_path)
 
             img_temp_path = os.path.join(imgs_temp_path, file_name)

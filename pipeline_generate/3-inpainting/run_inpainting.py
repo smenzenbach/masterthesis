@@ -23,11 +23,10 @@ from utils import (
 from utils import mask_on_image, dilate_mask, plot_grid
 from inpainting_iopaint_lama_sdxl import (
     inpaint_instance_iopaint_lama_sdxl,
-    setup_diffusion_model,
     inpaint_batch_iopaint_lama_sdxl,
 )
 from inpainting_iopaint_lama import inpaint_batch_iopaint_lama
-from inpainting_sdxl import inpaint_batch_sdxl
+from inpainting_sdxl import inpaint_batch_sdxl, setup_diffusion_model
 
 parser = argparse.ArgumentParser(description="Inpainting with iopaint")
 
@@ -103,26 +102,23 @@ else:
 
 
 # define output directories
-output_dir = f"/workspace/home/pipeline_outputs/{config['dataset']['name']}/{id_tag}/inpainting_intermediate"
+output_dir_intermediate = f"/workspace/home/pipeline_outputs/{config['dataset']['name']}/{id_tag}/inpainting_intermediate"
 
-output_dir2 = (
+output_dir_final = (
     f"/workspace/home/pipeline_outputs/{config['dataset']['name']}/{id_tag}/inpainting"
 )
 
 
 # Create output directories if they don't exist
-os.makedirs(output_dir, exist_ok=True)
+os.makedirs(output_dir_intermediate, exist_ok=True)
 
-if not os.path.exists(output_dir2):
-    os.makedirs(output_dir2)
+if not os.path.exists(output_dir_final):
+    os.makedirs(output_dir_final)
     if args.start is None:
         segmentation_masks = get_images_from_directory(
             dir_path=segmentation_masks_path, ignore_copy=True
         )
-        images_paths = get_images_from_directory(
-            dir_path=dataset["raw_path"], sub_dir=True
-        )
-
+        mask_names = create_file_names_list(segmentation_masks_path, ignore_copy=True)
     else:
         mask_names = create_file_names_list(segmentation_masks_path, ignore_copy=True)
 
@@ -131,7 +127,7 @@ else:
         "Output directory already exists. Check if there are still unsegmented images."
     )
     # check if all files are already segmented
-    already_inpainted_images = create_file_names_list(output_dir2)
+    already_inpainted_images = create_file_names_list(output_dir_final)
     to_be_inpainted_list = create_file_names_list(segmentation_masks_path)
     missing_files, _ = compare_file_lists(
         already_inpainted_images, to_be_inpainted_list
@@ -146,9 +142,7 @@ else:
             segmentation_masks = get_images_from_list(
                 missing_files, segmentation_masks_path
             )
-            images_paths = get_images_from_list(
-                missing_files, dataset["raw_path"], sub_dir=True
-            )
+            mask_names = missing_files
         else:
             mask_names = missing_files
 
@@ -162,7 +156,7 @@ if args.start is not None:
     segmentation_masks = get_images_from_list(
         mask_names, segmentation_masks_path, ignore_copy=True
     )
-    images_paths = get_images_from_list(mask_names, dataset["raw_path"], sub_dir=True)
+images_paths = get_images_from_list(mask_names, dataset["raw_path"], sub_dir=True)
 
 
 prompt = config["inpainting"]["prompt"]
@@ -213,8 +207,8 @@ for batch_index, (mask_path_list, image_path_list) in enumerate(
             image_path_list,
             kernel_size=kernel_size,
             iterations=iterations,
-            size=size,
-            save_dir=output_dir2,
+            dilation_size=size,
+            save_dir=output_dir_final,
         )
     elif model_name == "sdxl":
         inpaint_batch_sdxl(
@@ -225,8 +219,8 @@ for batch_index, (mask_path_list, image_path_list) in enumerate(
             generator,
             kernel_size=kernel_size,
             iterations=iterations,
-            size=size,
-            save_dir=output_dir2,
+            dilation_size=size,
+            save_dir=output_dir_final,
         )
     else:
         inpaint_batch_iopaint_lama_sdxl(
@@ -237,9 +231,9 @@ for batch_index, (mask_path_list, image_path_list) in enumerate(
             generator,
             kernel_size=kernel_size,
             iterations=iterations,
-            size=size,
-            save_dir=output_dir,
-            save_dir2=output_dir2,
+            dilation_size=size,
+            save_dir_intermediate=output_dir_intermediate,
+            save_dir_final=output_dir_final,
         )
     print(f"Finished batch {batch_index+1} of {num_batches}")
 

@@ -13,7 +13,7 @@ sys.path.append(project_root)
 from utils import file_name_from_file_path, inpainting_preprocessing
 
 
-def run_lama(imgs_temp_path, masks_temp_path, output_dir):
+def run_lama(imgs_path, masks_path, output_dir):
     init_model = "lama"  # @param ['lama', 'sd1.5', 'paint_by_example', 'ldm']
     device = "cuda"  # @param ['cuda', 'cpu', 'mps']
 
@@ -23,8 +23,8 @@ def run_lama(imgs_temp_path, masks_temp_path, output_dir):
         "run",
         f"--model={init_model}",
         f"--device={device}",
-        f"--image={imgs_temp_path}",
-        f"--mask={masks_temp_path}",
+        f"--image={imgs_path}",
+        f"--mask={masks_path}",
         f"--output={output_dir}",
     ]
 

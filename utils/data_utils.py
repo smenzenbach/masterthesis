@@ -227,6 +227,16 @@ def get_images_from_list(
             # Break after processing the top-level folder if not searching subfolders
             break
 
+    # sort images according to filename
+    if as_dict:
+        images = sorted(images, key=lambda x: x["file_name"])
+    else:
+        # Function to extract the numeric part from the filename
+        def extract_number(path):
+            return int(re.search(r"(\d+)\.jpg$", path).group(1))
+
+        # Sorting based on the extracted number
+        images = sorted(images, key=extract_number)
     return images
 
 
