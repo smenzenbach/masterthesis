@@ -11,10 +11,12 @@ if project_root not in sys.path:
 
 from utils import (
     create_file_names_list,
+    create_file_names_list_from_csv,
     get_images_from_directory,
     get_images_from_list,
     find_next_id,
     extract_index,
+    file_name_from_file_path,
 )
 from confounder_classification_sgl import build_pred_csv_sgl_with_backend
 from confounder_classification_gpt4 import build_pred_csv_gpt4_parallel
@@ -90,7 +92,7 @@ if __name__ == "__main__":
     images_path = dataset["raw_path"]
 
     if args.start is None:
-        images = get_images_from_directory(images_path)
+        image_paths = get_images_from_directory(images_path)
     else:
         # get list of image names from the directory
         image_names = create_file_names_list(images_path)
@@ -101,7 +103,7 @@ if __name__ == "__main__":
             if extract_index(name) >= args.start and extract_index(name) <= args.end
         ]
         # get the images from the list of image names
-        images = get_images_from_list(image_names, images_path)
+        image_paths = get_images_from_list(image_names, images_path)
 
     # set output dir
     output_dir = f"/workspace/home/pipeline_outputs/{dataset_name}/{id_tag}"
@@ -113,13 +115,17 @@ if __name__ == "__main__":
 
     # check if file exists
     if os.path.exists(csv_file):
-        # ask if the user wants to overwrite the file
-        overwrite = input(
-            f"The file {csv_file} already exists. Do you want to overwrite it? (y/n) "
+        # get already processed images
+        processed_files = create_file_names_list_from_csv(csv_file)
+        print(
+            f"Found {len(processed_files)} already processed images. Process remaining {len(image_paths) - len(processed_files)} images."
         )
-        if overwrite.lower() != "y":
-            print("Exiting the program.")
-            sys.exit()
+        # remove already processed images
+        image_paths = [
+            img
+            for img in image_paths
+            if file_name_from_file_path(img) not in processed_files
+        ]
 
     # Model outputs that are considered as True
     output_for_true = config["confounder_classification"]["output_for_true"]
@@ -147,7 +153,7 @@ if __name__ == "__main__":
         # Build the prediction CSV using sgl
         build_pred_csv_sgl_with_backend(
             csv_file,
-            images,
+            image_paths,
             user_input_list,
             output_for_true,
             num_batches=config["confounder_classification"]["num_batches"],
@@ -174,7 +180,7 @@ if __name__ == "__main__":
         # Build the prediction CSV using gpt4
         build_pred_csv_gpt4_parallel(
             csv_file,
-            images,
+            image_paths,
             prompt,
             output_for_true,
             num_workers=config["confounder_classification"]["num_batches"],

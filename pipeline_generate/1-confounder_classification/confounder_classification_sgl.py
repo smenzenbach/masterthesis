@@ -1,5 +1,7 @@
 import os
 import sys
+
+from gradio_client import file
 import sglang as sgl
 from sglang.lang.chat_template import get_chat_template
 import csv
@@ -14,7 +16,7 @@ import io
 project_root = os.path.abspath("../..")  # Adjust this path if needed
 sys.path.append(project_root)
 
-from utils import sort_csv_by_column, create_label_from_output
+from utils import sort_csv_by_column, create_label_from_output, file_name_from_file_path
 
 
 @sgl.function
@@ -43,11 +45,10 @@ def _image_multi_turn(s, image, user_input_list):
         s += sgl.assistant(sgl.gen(f"output_{i+1}", max_tokens=256, temperature=0))
 
 
-def run_instance_sgl(img_dict, user_input_list, output_for_true):
-    image_file_path = img_dict["file_path"]
+def run_instance_sgl(img_path, user_input_list, output_for_true):
 
     # Generate answers for the user input questions
-    state = _image_multi_turn.run(image_file_path, user_input_list)
+    state = _image_multi_turn.run(img_path, user_input_list)
     outputs = [state[f"output_{i+1}"] for i in range(len(user_input_list))]
 
     # Find predicted label
@@ -64,11 +65,10 @@ def chunks(lst, n):
 
 def build_pred_csv_sgl_batch(
     csv_path,
-    images,
+    image_paths,
     user_input_list,
     output_for_true,
     num_batches=1,
-    save_interval=1,
     resize_size=None,  # Add resize dimensions as a parameter
 ):
     """
@@ -83,16 +83,14 @@ def build_pred_csv_sgl_batch(
     ----------
     csv_path : str
         The path to save the csv file.
-    images: list of dict
-        A list of dictionaries containing the image objects and their metadata.
+    image_paths: list of str
+        A list of paths to the images.
     user_input_list : list
         A list of user input questions given to the sgl function.
     output_for_true : list
         A list of outputs that correspond to a label of 1 (confounder is present).
     num_batches : int, optional
         Number of batches to process, by default 1.
-    save_interval : int, optional
-        Save interval for batches intermediate results, by default 1.
     resize_size : tuple, optional
         Target size for image resizing (width, height), by default None.
 
@@ -101,20 +99,25 @@ def build_pred_csv_sgl_batch(
     None
     """
 
-    data = []
-    for batch_index, img_dicts in enumerate(
-        tqdm(chunks(images, num_batches), total=num_batches)
+    # Check if the CSV file already exists
+    if os.path.exists(csv_path):
+        existing_data = pd.read_csv(csv_path)
+    else:
+        existing_data = pd.DataFrame(columns=["image_file_name", "label", "outputs"])
+
+    for batch_index, paths_batch in enumerate(
+        tqdm(chunks(image_paths, num_batches), total=num_batches)
     ):
         inp = []
 
-        for img_dict in img_dicts:
-            image_path = img_dict["file_path"]
-            image_file_name = img_dict["file_name"]
+        for image_path in paths_batch:
+            image_file_name = file_name_from_file_path(image_path)
 
             if resize_size is None:
                 inp.append({"image": image_path, "user_input_list": user_input_list})
 
             else:
+                print(f"Resizing image: {image_file_name} to {resize_size}")
                 # Open image, resize it in memory and convert to bytes
                 with Image.open(image_path) as img:
                     img_resized = img.resize(resize_size)
@@ -127,8 +130,10 @@ def build_pred_csv_sgl_batch(
         # Generate answers for the user input questions
         states = _image_multi_turn.run_batch(inp)
 
-        for idx, img_dict in enumerate(img_dicts):
-            image_file_name = img_dict["file_name"]
+        new_data = []
+
+        for idx, image_path in enumerate(paths_batch):
+            image_file_name = file_name_from_file_path(image_path)
             outputs = [
                 states[idx][f"output_{i+1}"] for i in range(len(user_input_list))
             ]
@@ -136,27 +141,28 @@ def build_pred_csv_sgl_batch(
             # Find predicted label
             label = create_label_from_output(outputs[-1], output_for_true)
 
-            data.append([image_file_name, label, outputs])
+            new_data.append([image_file_name, label, outputs])
 
-        # Save intermediate results every `save_interval` batches
-        if (batch_index + 1) % save_interval == 0 or batch_index == num_batches - 1:
-            temp_df = pd.DataFrame(
-                data, columns=["image_file_name", "label", "outputs"]
-            )
-            temp_df.to_csv(csv_path, index=False)
-            print(f"Saved batch {batch_index + 1}/{num_batches} to {csv_path}")
+        # Save intermediate results
+        new_data_df = pd.DataFrame(
+            new_data, columns=["image_file_name", "label", "outputs"]
+        )
 
-    # Final save
-    df = pd.DataFrame(data, columns=["image_file_name", "label", "outputs"])
-    df.to_csv(csv_path, index=False)
-    # Sort the CSV file by the first column (image_file_name)
-    sort_csv_by_column(csv_path, column_index=0, header=True)
-    print(f"Final data saved to {csv_path}")
+        combined_data_df = pd.concat([existing_data, new_data_df]).drop_duplicates(
+            subset=["image_file_name"]
+        )
+
+        # Sort combined data by image_file_name
+        combined_data_df.sort_values(by="image_file_name", inplace=True)
+        combined_data_df.to_csv(csv_path, index=False)
+        print(f"Saved batch {batch_index + 1}/{num_batches} to {csv_path}")
+
+    print(f"All data saved to {csv_path}")
 
 
 def build_pred_csv_sgl(
     csv_path,
-    images,
+    image_paths,
     user_input_list,
     output_for_true,
 ):
@@ -169,12 +175,12 @@ def build_pred_csv_sgl(
         if csv_file.tell() == 0:
             writer.writerow(["image_file_name", "label", "outputs"])
 
-        for img_dict in images:
-            image_file_name = img_dict["file_name"]
+        for image_path in image_paths:
+            image_file_name = file_name_from_file_path(image_path)
 
             # Generate answers for the user input questions
             outputs, label = run_instance_sgl(
-                img_dict, user_input_list, output_for_true
+                image_path, user_input_list, output_for_true
             )
 
             # Write to csv
@@ -186,11 +192,10 @@ def build_pred_csv_sgl(
 
 def build_pred_csv_sgl_with_backend(
     csv_path,
-    images,
+    image_paths,
     user_input_list,
     output_for_true,
     num_batches=1,  # if None then no batching
-    save_interval=1,
     model_path="liuhaotian/llava-v1.6-vicuna-7b",
     tokenizer_path="llava-hf/llava-1.5-7b-hf",
     chat_template="vicuna_v1.1",
@@ -204,15 +209,14 @@ def build_pred_csv_sgl_with_backend(
     sgl.set_default_backend(runtime)
 
     if num_batches is None:
-        build_pred_csv_sgl(csv_path, images, user_input_list, output_for_true)
+        build_pred_csv_sgl(csv_path, image_paths, user_input_list, output_for_true)
     else:
         build_pred_csv_sgl_batch(
             csv_path,
-            images,
+            image_paths,
             user_input_list,
             output_for_true,
             num_batches,
-            save_interval,
         )
 
     # shutdown sgl server
