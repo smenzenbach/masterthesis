@@ -1,0 +1,30 @@
+[dataset]
+name = "CelebA"
+yaml_file = '/workspace/home/data/datasets.yaml'
+
+[confounder_classification]
+model = 'sgl'
+output_for_true = ["yes", "yes."]
+num_batches = 500
+
+
+[confounder_classification.sgl]
+model_path = "liuhaotian/llava-v1.6-vicuna-7b"
+tokenizer_path = "llava-hf/llava-1.5-7b-hf"
+chat_template = "vicuna_v1.1"
+user_input_list = [
+    "The image shows a close-up of a persons face. For me the hair color is important. Can you describe it to me?",
+    "Can you tell me, considering your description, if the person has blonde hair? Answer with one word of the options [yes, no]",
+]
+
+[segmentation]
+model = 'groundingRMBG'
+custom_voabulary = ["hair"]
+
+[inpainting]
+model = 'flux'
+prompt = "dark hair color"
+
+[inpainting.dilation]
+kernel_size = 5
+iterations = 10
