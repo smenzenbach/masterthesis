@@ -1,0 +1,16 @@
+[dataset]
+name = "CelebA"
+yaml_file = '/workspace/home/data/datasets.yaml' # remove in clean up
+
+
+[segmentation]
+model = 'groundingRMBG'
+custom_voabulary = ["face"]
+
+[inpainting]
+model = 'flux'
+prompt = "switch gender" # ????
+
+[inpainting.dilation]
+kernel_size = 5
+iterations = 10
