@@ -7,6 +7,11 @@ from tqdm import tqdm
 import numpy as np
 import tensorflow as tf
 
+# Add the project root directory to sys.path
+project_root = os.path.abspath("../..")  # Adjust this path if needed
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
 from utils import (
     get_images_from_csv,
     get_images_from_list,
@@ -171,7 +176,9 @@ if __name__ == "__main__":
     if model_name == "groundingRMBG":
         processor, grounding_model, pipe = setup_processor_model_pipeline(args.device)
     elif model_name == "groundingRMBG2":
-        processor, grounding_model, segmentation_model = setup_processor_model_pipeline2(args.device)
+        processor, grounding_model, segmentation_model = (
+            setup_processor_model_pipeline2(args.device)
+        )
     elif model_name == "dito":
         model, text_embeddings, parser_fn = setup_model(custom_vocabulary, args.device)
         confidence_threshold = config["segmentation"]["dito"]["confidence_threshold"]
