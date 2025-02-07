@@ -158,7 +158,7 @@ def create_file_names_list(dir_path, sub_dir=False, ignore_copy=False):
 
 
 def create_file_names_list_from_csv(
-    csv_file_path, header=True, filter_func=None, ignore_copy=False
+    csv_file_path, header=True, filter_func=None, ignore_copy=False, num_imgs=None
 ):
     with open(csv_file_path, "r") as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
@@ -168,19 +168,27 @@ def create_file_names_list_from_csv(
             except StopIteration:
                 print(f"Empty CSV file: {csv_file_path}")
                 return []
-        if filter_func is None:
-            file_list = [
-                row[0]
-                for row in csv_reader
-                if ignore_copy and "copy" not in row[0].lower() or not ignore_copy
-            ]
-        else:
-            file_list = [
-                row[0]
-                for row in csv_reader
-                if filter_func(row)
-                and (ignore_copy and "copy" not in row[0].lower() or not ignore_copy)
-            ]
+        file_list = []
+        counter = 0
+        for row in csv_reader:
+            if num_imgs is not None and counter >= num_imgs:
+                print(f"{num_imgs} images added to list.")
+                break
+            if filter_func is None:
+                if ignore_copy and "copy" in row[0].lower():
+                    continue
+                file_list.append(row[0])
+                counter += 1
+            else:
+                if filter_func([int(x) if x.isdigit() else x for x in row]) and (
+                    not ignore_copy or "copy" not in row[0].lower()
+                ):
+                    file_list.append(row[0])
+                    counter += 1
+        if num_imgs is not None and len(file_list) < num_imgs:
+            print(
+                f"Only {len(file_list)} images found in the CSV file, less than the requested {num_imgs}."
+            )
     return file_list
 
 
@@ -252,21 +260,34 @@ def get_images_from_csv(
     ignore_copy=True,
     header=True,
     filter_func=None,
+    num_imgs=None,
 ):
-    image_names = create_file_names_list_from_csv(csv_file_path, header, filter_func)
-    print(f"Found {len(image_names)} images in {csv_file_path}")
+    image_names = create_file_names_list_from_csv(
+        csv_file_path, header, filter_func, ignore_copy, num_imgs
+    )
+    if as_dict:
+        print(f"{len(image_names)} image dicts added to list from {csv_file_path}.")
+    else:
+        print(f"{len(image_names)} image paths added to list from {csv_file_path}.")
     return get_images_from_list(image_names, dir_path, sub_dir, as_dict, ignore_copy)
 
 
 def get_n_confounded_m_non_confounded_images(
-    dir_path, gt_label_csv_path, n, m, sub_dir=False, as_dict=False, ignore_copy=True
+    dir_path,
+    gt_label_csv_path,
+    n,
+    m,
+    sub_dir=False,
+    as_dict=False,
+    ignore_copy=True,
+    label_column=1,
 ):
     # Load the ground truth labels from the CSV file
     with open(gt_label_csv_path, "r") as file:
         reader = csv.reader(file)
         # Skip the header row
         next(reader)
-        gt_labels = {row[0]: row[1] for row in reader}
+        gt_labels = {row[0]: row[label_column] for row in reader}
 
     # Get the list of image names from csv file (in case images are in subdirectories)
     image_names = list(gt_labels.keys())
