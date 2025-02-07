@@ -1,16 +1,25 @@
 import torch
 from PIL import Image
+from torchvision.ops import box_convert
+
+import os, sys
+
+path = "/workspace/home/GroundingDINO"
+if path not in sys.path:
+    sys.path.append(path)
 
 
 # Add the project root directory to sys.path
 from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 from transformers import pipeline
 
+from groundingdino.util.inference import load_model, load_image, predict, annotate
+
 from utils import nms_grounding, remove_big_box_grounding, remove_small_box_grounding
 
 
 def segment_instance_groundingRMBG(
-    img_dict,
+    img_path,
     custom_vocab,
     detection_model,
     processor,
@@ -18,22 +27,51 @@ def segment_instance_groundingRMBG(
     device=0,
     save_path=None,
 ):
-    image = Image.open(img_dict["file_path"])
+    image = Image.open(img_path)
     text = ""
     for vocab in custom_vocab:
-        text += f"a {vocab.lower()} . "
+        text += f"{vocab.lower()} . "
 
-    inputs = processor(image, text, return_tensors="pt").to(device)
-    with torch.no_grad():
-        outputs = detection_model(**inputs)
+    # inputs = processor(image, text, return_tensors="pt").to(device)
+    # with torch.no_grad():
+    #    outputs = detection_model(**inputs)
 
-    results = processor.post_process_grounded_object_detection(
-        outputs,
-        inputs.input_ids,
-        box_threshold=0.4,
-        text_threshold=0.3,
-        target_sizes=[image.size[::-1]],
+    # results = processor.post_process_grounded_object_detection(
+    #     outputs,
+    #     inputs.input_ids,
+    #     box_threshold=0.4,
+    #     text_threshold=0.3,
+    #     target_sizes=[image.size[::-1]],
+    # )
+
+    image_source, img = load_image(img_path)
+    boxes, logits, phrases = predict(
+        model=detection_model,
+        image=img,
+        caption=text,
+        box_threshold=0.35,
+        text_threshold=0.25,
     )
+
+    annotated_frame = annotate(image_source, boxes, logits, phrases)
+
+    Image.fromarray(annotated_frame).show()
+
+    # adapt boxes so they are they are not percentage values but pixel values
+    h, w, _ = image_source.shape
+    resized_boxes = boxes * torch.Tensor([w, h, w, h])
+    xyxy = box_convert(boxes=resized_boxes, in_fmt="cxcywh", out_fmt="xyxy")
+
+    results = [
+        {
+            "scores": logits,
+            "labels": phrases,
+            "boxes": xyxy,
+        }
+    ]
+
+    print(boxes)
+    print(results)
 
     """
     Results is a list of dict with the following structure:
@@ -55,6 +93,10 @@ def segment_instance_groundingRMBG(
     results = remove_big_box_grounding(results, image.size, 0.5)
     results = remove_small_box_grounding(results, image.size, 0.06)
 
+    print(results)
+
+    image.show()
+
     # Create a blank mask for the original image
     original_mask = Image.new("L", image.size, 0)
 
@@ -63,7 +105,9 @@ def segment_instance_groundingRMBG(
     for box in results[0]["boxes"].cpu().numpy():
         # pre process the image for segmentation
         # crop the image to the bounding box of the object
+        print(box)
         cropped_image = image.crop(box)
+        cropped_image.show()
 
         # run the segmentation model
         pil_mask = segmentation_pipe(cropped_image, return_mask=True)
@@ -105,9 +149,15 @@ def segment_instance_groundingRMBG(
 def setup_processor_model_pipeline(device=0):
     # build grounding dino from huggingface
     model_id = "IDEA-Research/grounding-dino-tiny"
-    processor = AutoProcessor.from_pretrained(model_id)
-    grounding_model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(
-        f"cuda:{device}"
+    # processor = AutoProcessor.from_pretrained(model_id)
+    # grounding_model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(
+    #    f"cuda:{device}"
+    # )
+    processor = None
+    grounding_model = load_model(
+        "/workspace/home/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
+        "/workspace/home/GroundingDINO/weights/groundingdino_swint_ogc.pth",
+        device=f"cuda:{device}",
     )
 
     pipe = pipeline(
