@@ -19,7 +19,7 @@ from .data_utils import (
 
 from .confounder_classification_utils import create_label_from_output
 
-# from .detection_and_segmentation_utils import *
+from .detection_and_segmentation_utils import *
 
 from .image_utils import mask_on_image, plot_grid, dilate_mask
 
@@ -27,4 +27,4 @@ from .check_completeness_utils import *
 
 from .mnist_utils import save_mnist_images
 
-from .inpainting_utils import inpainting_preprocessing
+from .inpainting_utils import inpainting_preprocessing, get_empty_mask, get_full_mask

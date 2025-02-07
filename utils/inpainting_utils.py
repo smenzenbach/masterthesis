@@ -12,3 +12,13 @@ def inpainting_preprocessing(
     dilated_mask = dilate_mask(mask, kernel_size=kernel_size, iterations=iterations)
     dilated_mask = dilated_mask.resize(img.size)
     return img, dilated_mask
+
+
+def get_empty_mask(image_path):
+    img = Image.open(image_path).convert("RGB")
+    return Image.new("L", img.size, 0)
+
+
+def get_full_mask(image_path):
+    img = Image.open(image_path).convert("RGB")
+    return Image.new("L", img.size, 255)
